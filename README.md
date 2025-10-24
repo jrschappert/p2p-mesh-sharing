@@ -75,6 +75,25 @@ VITE_FAL_KEY=YOUR_FAL_KEY_HERE
 
 (Do **not** commit this file.)
 
+Optional one-liners:
+
+```bash
+# macOS (zsh)
+echo "VITE_FAL_KEY=YOUR_FAL_KEY_HERE" > .env
+```
+
+```powershell
+# Windows (PowerShell)
+"VITE_FAL_KEY=YOUR_FAL_KEY_HERE" | Out-File -FilePath .env -Encoding utf8 -NoNewline
+```
+
+If you only want to set it for one session:
+
+* macOS: `export VITE_FAL_KEY=... && npm run dev`
+* PowerShell: `$env:VITE_FAL_KEY='...' ; npm run dev`
+
+---
+
 ## 3. Run the App
 
 ```bash
@@ -93,6 +112,13 @@ Click the ground to open the modal → type a prompt → generate a model, or us
 * **401 FAL error** → Verify `.env` and restart the dev server.
 * **Version mismatch** → Ensure Node LTS is active (`nvm use --lts`).
 * **PowerShell env lost after restart** → Use `.env` instead of setting `$env:` manually.
+
+---
+
+## 5. File Overview
+
+* **`src/main.ts`** — contains all Babylon.js client logic (scene setup, lighting, camera, model placement, and FAL integration).
+* **`index.html`** — defines the render canvas and the on-screen instruction text overlay.
 
 ---
 
