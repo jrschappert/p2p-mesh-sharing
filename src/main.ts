@@ -483,20 +483,29 @@ window.addEventListener("keydown", (ev) => {
         const targetSize = 2;
         const scale = modelSize > 0 ? targetSize / modelSize : 1;
         rootMesh.scaling = new Vector3(scale, scale, scale);
+                
+        // Rotate to face the camera FIRST (before positioning)
+        const rotationAngle = pendingRotation + Math.PI;
+        rootMesh.rotationQuaternion = null;
+        rootMesh.rotation.y = rotationAngle;
         
-        console.log(`Model size: ${modelSize.toFixed(2)}, Scale factor: ${scale.toFixed(2)}`);
-        
+        // Also rotate all child meshes if root is just a container
+        meshes.forEach(mesh => {
+          if (mesh !== rootMesh && mesh.parent === rootMesh) {
+            // Child meshes inherit parent rotation, but set it explicitly if needed
+          } else if (mesh !== rootMesh && !mesh.parent) {
+            // If meshes are not parented, rotate them individually
+            mesh.rotationQuaternion = null;
+            mesh.rotation.y = rotationAngle;
+          }
+        });
+                
         // Position at the clicked location
         rootMesh.position.x = pendingPlacement.x;
         rootMesh.position.z = pendingPlacement.z;
         
         // Snap to ground - account for scaling
         rootMesh.position.y = -minY * scale;
-        
-        // Rotate to face the camera using stored rotation
-        rootMesh.rotation.y = pendingRotation + Math.PI;
-        
-        console.log("Model rotation set to:", rootMesh.rotation.y);
         
         // Enable collisions and shadows for all meshes
         meshes.forEach(mesh => {
@@ -507,7 +516,6 @@ window.addEventListener("keydown", (ev) => {
           }
         });
         
-        console.log('✅ Model placed successfully');
         updateProgress(100, "Model placed successfully!");
       }
     }
@@ -521,9 +529,7 @@ window.addEventListener("keydown", (ev) => {
       // Get camera's current Y rotation (horizontal facing direction)
       const cameraForward = camera.getDirection(Vector3.Forward());
       pendingRotation = Math.atan2(cameraForward.x, cameraForward.z);
-      
-      console.log("Camera rotation stored:", pendingRotation);
-      
+            
       // Exit pointer lock to interact with modal
       document.exitPointerLock();
       
@@ -559,7 +565,7 @@ window.addEventListener("keydown", (ev) => {
 
     try {
       // Use the cached test model URL
-      const testModelUrl = "/models/test_model_1.glb";
+      const testModelUrl = "public/models/test_model_1.glb";
       
       updateProgress(50, "Preparing test model...");
       
