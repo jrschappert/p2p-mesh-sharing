@@ -56,6 +56,7 @@ style.textContent = `
   #promptModal h2 {
     margin: 0 0 20px 0;
     color: #333;
+    font-family: system-ui, sans-serif;
   }
   
   #promptModal input {
@@ -149,7 +150,7 @@ const hudElement = document.getElementById('hud') as HTMLElement;
 
 function updateHudText(isLocked: boolean) {
   if (isLocked) {
-    hudElement.innerHTML = 'Click to place model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
+    hudElement.innerHTML = 'Click to Place Model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
   } else {
     hudElement.innerHTML = 'Click to lock mouse • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
   }
