@@ -7,6 +7,7 @@ import { UniversalCamera } from "@babylonjs/core/Cameras/universalCamera";
 import { Vector3, Color3 } from "@babylonjs/core/Maths/math";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import "@babylonjs/core/Collisions/collisionCoordinator"; // enables collisions
 import "@babylonjs/core/Helpers/sceneHelpers"; // for inspector shortcut
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent"; // enables shadows
@@ -314,11 +315,11 @@ const scene = new Scene(engine);
 // Lighting - Directional light for shadows (from behind player)
 const light = new DirectionalLight("dirLight", new Vector3(0, -1, 1), scene);
 light.position = new Vector3(0, 50, -20);
-light.intensity = 3;
+light.intensity = .3;
 
 // Add ambient light so shadows are visible
 const ambientLight = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambientLight.intensity = 1.2;
+ambientLight.intensity = .9;
 
 // Shadow generator
 const shadowGenerator = new ShadowGenerator(2048, light);
@@ -419,7 +420,21 @@ window.addEventListener("keydown", (ev) => {
       previewCube.position.x = hit.pickedPoint.x;
       previewCube.position.z = hit.pickedPoint.z;
       previewCube.position.y = 1; // half the cube size to sit on ground
-      previewCube.isVisible = true;
+
+      // Check if preview cube overlaps with any other mesh (except ground and preview itself)
+      let overlapping = false;
+      for (const mesh of scene.meshes) {
+        if (mesh !== previewCube && mesh !== ground && mesh.isVisible && mesh.isEnabled()) {
+          // Check if meshes intersect using bounding boxes
+          if (previewCube.intersectsMesh(mesh, false)) {
+            overlapping = true;
+            break;
+          }
+        }
+      }
+      
+      // Only show preview if not overlapping
+      previewCube.isVisible = !overlapping;
     } else {
       // Hide if not pointing at ground
       previewCube.isVisible = false;
@@ -461,6 +476,10 @@ window.addEventListener("keydown", (ev) => {
             if (max.x > maxX) maxX = max.x;
             if (min.z < minZ) minZ = min.z;
             if (max.z > maxZ) maxZ = max.z;
+            
+            if (mesh.material instanceof PBRMaterial) {
+              mesh.material.unlit = true;
+            }
           }
         });
         
@@ -565,7 +584,7 @@ window.addEventListener("keydown", (ev) => {
 
     try {
       // Use the cached test model URL
-      const testModelUrl = "public/models/test_model_1.glb";
+      const testModelUrl = "models/test_model_1.glb";
       
       updateProgress(50, "Preparing test model...");
       
