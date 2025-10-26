@@ -33,7 +33,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_FAL_AI_API_KEY: ${{ secrets.FAL_AI_API_KEY }}
+          VITE_FAL_KEY: ${{ secrets.FAL_KEY }}
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
