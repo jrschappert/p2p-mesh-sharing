@@ -314,11 +314,11 @@ const scene = new Scene(engine);
 // Lighting - Directional light for shadows (from behind player)
 const light = new DirectionalLight("dirLight", new Vector3(0, -1, 1), scene);
 light.position = new Vector3(0, 50, -20);
-light.intensity = 0.8;
+light.intensity = 3;
 
 // Add ambient light so shadows are visible
 const ambientLight = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambientLight.intensity = 0.6;
+ambientLight.intensity = 1.2;
 
 // Shadow generator
 const shadowGenerator = new ShadowGenerator(2048, light);
@@ -326,7 +326,7 @@ shadowGenerator.usePercentageCloserFiltering = true;
 shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH;
 shadowGenerator.bias = 0.00001; // Fixes shadow acne
 shadowGenerator.normalBias = 0.05; // Additional fix for acne
-shadowGenerator.darkness = 0.5; // Make shadows more visible (0 = black, 1 = no shadow)
+shadowGenerator.darkness = 0; // Make shadows more visible (0 = black, 1 = no shadow)
 
 
 // Collisions + gravity
