@@ -144,6 +144,27 @@ const cursor = document.createElement('div');
 cursor.id = 'cursor';
 document.body.appendChild(cursor);
 
+// Setup HUD text management
+const hudElement = document.getElementById('hud') as HTMLElement;
+
+function updateHudText(isLocked: boolean) {
+  if (isLocked) {
+    hudElement.innerHTML = 'Click to place model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
+  } else {
+    hudElement.innerHTML = 'Click to lock mouse • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
+  }
+}
+
+// Initialize HUD with unlocked state
+updateHudText(false);
+
+// Listen for pointer lock changes
+document.addEventListener('pointerlockchange', () => {
+  const isLocked = document.pointerLockElement === canvas;
+  updateHudText(isLocked);
+});
+
+
 // Create modal for prompt input
 const overlay = document.createElement('div');
 overlay.id = 'modalOverlay';
@@ -351,20 +372,6 @@ camera.keysUp.push(87); // W
 camera.keysDown.push(83); // S
 camera.keysLeft.push(65); // A
 camera.keysRight.push(68); // D
-
-
-// Jump (simple)
-let canJump = false;
-scene.registerBeforeRender(() => {
-  // naive ground detection: check if camera is near y=2 (resting height)
-  if (camera.position.y <= 2.01) canJump = true; else canJump = false;
-});
-window.addEventListener("keydown", (ev) => {
-  if (ev.code === "Space" && canJump) {
-    // give a small upward impulse
-    camera.cameraDirection.y += 0.2;
-  }
-});
 
 
   // Pointer lock on click for immersive mouse look
