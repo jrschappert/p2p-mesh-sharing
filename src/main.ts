@@ -715,9 +715,9 @@ window.addEventListener("resize", () => {
 
 import { runAllLocalTests } from "./chunking-test";
 
-// Add keyboard shortcut
-window.addEventListener("keydown", async (e) => {
-  if (e.key === 't') {
-    await testChunking("models/test_model_1.glb");
-  }
-});
+// // Add keyboard shortcut
+// window.addEventListener("keydown", async (e) => {
+//   if (e.key === 't') {
+//     await testChunking("models/test_model_1.glb");
+//   }
+// });
