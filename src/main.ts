@@ -711,28 +711,3 @@ engine.runRenderLoop(() => {
 window.addEventListener("resize", () => {
   engine.resize();
 });
-
-
-//testing ws connection
-console.log("Attempting to connect to signaling server...");
-
-const ws = new WebSocket('ws://localhost:8080');
-
-ws.onopen = () => {
-  
-  const testMessage = { type: 'greeting', payload: 'Hello' };
-  ws.send(JSON.stringify(testMessage));
-};
-
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-  console.log('Received message from server:', message);
-};
-
-ws.onerror = (error) => {
-  console.error('WebSocket error:', error);
-};
-
-ws.onclose = () => {
-  console.log('Disconnected from signaling server');
-};
