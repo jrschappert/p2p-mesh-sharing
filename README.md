@@ -104,6 +104,10 @@ Then open the printed URL (usually `http://localhost:5173`) in your browser.
 
 Click the ground to open the modal → type a prompt → generate a model, or use **Test Model** if `public/models/test_model.glb` exists.
 
+### Run the server
+1. `cd server`
+2. `npm start`
+
 ---
 
 ## 4. Common Issues
