@@ -1,3 +1,5 @@
+// Expose P2PClient test for browser console
+import "./P2PClient.test";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
