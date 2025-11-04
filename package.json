@@ -9,12 +9,33 @@
     "preview": "vite preview --port 4173"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.9.2",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
     "vite": "^5.4.10"
   },
   "dependencies": {
     "@babylonjs/core": "^7.46.0",
     "@babylonjs/loaders": "^7.54.3",
-    "@fal-ai/client": "^1.7.0"
-  }
+    "@fal-ai/client": "^1.7.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "ws": "^8.18.3"
+  },
+  "description": "This project uses Babylon.js and FAL (Flux + Trellis) to generate and place AI-made 3D models in a scene. Follow these steps to get it running locally.",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jrschappert/p2p-mesh-sharing.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jrschappert/p2p-mesh-sharing/issues"
+  },
+  "homepage": "https://github.com/jrschappert/p2p-mesh-sharing#readme"
 }
