@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "dev": "ts-node --transpile-only signaling-server.ts",
+  "dev": "node index.js",
   "test": "node -r ts-node/register -e \"require('./signaling-server-test.ts')\"",
   "start": "node dist/signaling-server.js",
   "build": "tsc -p ../tsconfig.json --outDir dist"
