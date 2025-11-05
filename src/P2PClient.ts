@@ -2,7 +2,7 @@
 // Implements WebRTC handshake logic: signaling, peer connection, and message handling
 
 type SignalMessage = {
-	type: 'offer' | 'answer' | 'ice-candidate';
+	type: 'offer' | 'answer' | 'ice';
 	from: string;
 	to: string;
 	data: any;
@@ -66,7 +66,7 @@ export class P2PClient {
 			case 'answer':
 				await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(msg.data));
 				break;
-			case 'ice-candidate':
+			case 'ice':
 				if (msg.data) {
 					try {
 						await this.peerConnection!.addIceCandidate(new RTCIceCandidate(msg.data));
@@ -92,7 +92,7 @@ export class P2PClient {
 		this.peerConnection.onicecandidate = (event) => {
 			if (event.candidate && this.remoteId) {
 				this.signalingSend({
-					type: 'ice-candidate',
+					type: 'ice',
 					from: this.localId,
 					to: this.remoteId,
 					data: event.candidate,

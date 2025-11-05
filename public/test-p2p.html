@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>P2P Test</title>
+    <style>
+        .peer { margin: 20px; padding: 10px; border: 1px solid #ccc; }
+        .log { height: 200px; overflow-y: scroll; background: #f0f0f0; padding: 8px; margin: 8px 0; }
+    </style>
+</head>
+<body>
+    <div class="peer" id="peer1">
+        <h3>Peer 1 (Initiator)</h3>
+        <button onclick="startPeer1()">Start Peer 1</button>
+        <button onclick="connectToPeer2()">Connect to Peer 2</button>
+        <div class="log" id="log1"></div>
+    </div>
+    <div class="peer" id="peer2">
+        <h3>Peer 2</h3>
+        <button onclick="startPeer2()">Start Peer 2</button>
+        <div class="log" id="log2"></div>
+    </div>
+
+    <script type="module">
+        import { P2PClient } from '/src/P2PClient.js';  // Note: needs .js extension for browser
+
+        let peer1, peer2;
+        let peer1Id, peer2Id;
+
+        // Helper to log to UI
+        function log(peerId, msg) {
+            const logEl = document.getElementById(`log${peerId}`);
+            const line = document.createElement('div');
+            line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Create WebSocket connection to signaling server
+        function createSignaling(peerId, onSignal) {
+            const ws = new WebSocket('ws://localhost:3000');
+            ws.onopen = () => {
+                // Announce presence with random infoHash (test model ID)
+                ws.send(JSON.stringify({
+                    type: 'announce',
+                    infoHash: 'test-model-1',
+                    from: peerId,
+                }));
+            };
+            ws.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                log(peerId, `← ${msg.type} from ${msg.from || 'server'}`);
+                
+                if (msg.type === 'peers') {
+                    log(peerId, `Known peers: ${msg.peers.map(p => p.peerId).join(', ')}`);
+                } else if (['offer', 'answer', 'ice'].includes(msg.type)) {
+                    // Convert 'ice' to 'ice-candidate' for P2PClient
+                    const type = msg.type === 'ice' ? 'ice-candidate' : msg.type;
+                    onSignal({ type, from: msg.from, to: peerId, data: msg.payload });
+                }
+            };
+            return (msg) => {
+                // Convert 'ice-candidate' to 'ice' for server
+                const type = msg.type === 'ice-candidate' ? 'ice' : msg.type;
+                log(peerId, `→ ${type} to ${msg.to}`);
+                ws.send(JSON.stringify({
+                    type,
+                    infoHash: 'test-model-1',
+                    from: msg.from,
+                    to: msg.to,
+                    payload: msg.data
+                }));
+            };
+        }
+
+        // Create a P2PClient instance
+        function createPeer(peerId) {
+            const send = createSignaling(peerId, (msg) => {
+                peer.handleSignal(msg);
+            });
+            const peer = new P2PClient(peerId, send);
+            
+            // Log data channel events
+            peer.onChannelOpen = () => log(peerId, 'Data channel opened! 🎉');
+            peer.onChannelClose = () => log(peerId, 'Data channel closed');
+            peer.onChannelError = (e) => log(peerId, `Data channel error: ${e}`);
+            peer.onChannelMessage = (data) => {
+                try {
+                    const msg = JSON.parse(data);
+                    log(peerId, `Received: ${JSON.stringify(msg)}`);
+                } catch (e) {
+                    log(peerId, `Received: ${data}`);
+                }
+            };
+            
+            return peer;
+        }
+
+        // Expose functions to window for button clicks
+        window.startPeer1 = () => {
+            peer1Id = 'peer1-' + Math.random().toString(36).slice(2, 7);
+            peer1 = createPeer(peer1Id);
+            log(1, `Started as ${peer1Id}`);
+        };
+
+        window.startPeer2 = () => {
+            peer2Id = 'peer2-' + Math.random().toString(36).slice(2, 7);
+            peer2 = createPeer(peer2Id);
+            log(2, `Started as ${peer2Id}`);
+        };
+
+        window.connectToPeer2 = async () => {
+            if (!peer1 || !peer2Id) {
+                log(1, 'Start both peers first!');
+                return;
+            }
+            log(1, `Connecting to ${peer2Id}...`);
+            await peer1.connectTo(peer2Id);
+        };
+
+        // Test data channel once connected
+        function testDataChannel(peer, peerId) {
+            if (peer.isDataChannelOpen()) {
+                peer.send({ type: 'test', message: `Hello from ${peerId}!` });
+            }
+        }
+    </script>
+</body>
+</html>
