@@ -1,3 +1,4 @@
+<!-- to run this test-p2p.html, run npx serve public -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -21,108 +22,132 @@
     </div>
 
     <script type="module">
-        import { P2PClient } from '/src/P2PClient.js';  // Note: needs .js extension for browser
+import { P2PClient } from '/src/P2PClient.js';
 
-        let peer1, peer2;
-        let peer1Id, peer2Id;
+let peer1, peer2;
+let myPeerId1, myPeerId2;
 
-        // Helper to log to UI
-        function log(peerId, msg) {
-            const logEl = document.getElementById(`log${peerId}`);
-            const line = document.createElement('div');
-            line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
-            logEl.appendChild(line);
-            logEl.scrollTop = logEl.scrollHeight;
-        }
+const AUTO_CONNECT = false; 
+const SIGNALING_ORIGIN = 'http://localhost:3000';     // HTTP url for /peers
+const SIGNALING_WS = 'ws://localhost:3000';          // WebSocket url
+const MODEL_ID = 'test-model-1'; // set to true for demo auto-connect to first discovered peer
 
-        // Create WebSocket connection to signaling server
-        function createSignaling(peerId, onSignal) {
-            const ws = new WebSocket('ws://localhost:3000');
-            ws.onopen = () => {
-                // Announce presence with random infoHash (test model ID)
-                ws.send(JSON.stringify({
-                    type: 'announce',
-                    infoHash: 'test-model-1',
-                    from: peerId,
-                }));
-            };
-            ws.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                log(peerId, `← ${msg.type} from ${msg.from || 'server'}`);
-                
-                if (msg.type === 'peers') {
-                    log(peerId, `Known peers: ${msg.peers.map(p => p.peerId).join(', ')}`);
-                } else if (['offer', 'answer', 'ice'].includes(msg.type)) {
-                    // Convert 'ice' to 'ice-candidate' for P2PClient
-                    const type = msg.type === 'ice' ? 'ice-candidate' : msg.type;
-                    onSignal({ type, from: msg.from, to: peerId, data: msg.payload });
-                }
-            };
-            return (msg) => {
-                // Convert 'ice-candidate' to 'ice' for server
-                const type = msg.type === 'ice-candidate' ? 'ice' : msg.type;
-                log(peerId, `→ ${type} to ${msg.to}`);
-                ws.send(JSON.stringify({
-                    type,
-                    infoHash: 'test-model-1',
-                    from: msg.from,
-                    to: msg.to,
-                    payload: msg.data
-                }));
-            };
-        }
+function log(peerNum, msg) {
+  const logEl = document.getElementById(`log${peerNum}`);
+  const line = document.createElement('div');
+  line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
 
-        // Create a P2PClient instance
-        function createPeer(peerId) {
-            const send = createSignaling(peerId, (msg) => {
-                peer.handleSignal(msg);
-            });
-            const peer = new P2PClient(peerId, send);
-            
-            // Log data channel events
-            peer.onChannelOpen = () => log(peerId, 'Data channel opened! 🎉');
-            peer.onChannelClose = () => log(peerId, 'Data channel closed');
-            peer.onChannelError = (e) => log(peerId, `Data channel error: ${e}`);
-            peer.onChannelMessage = (data) => {
-                try {
-                    const msg = JSON.parse(data);
-                    log(peerId, `Received: ${JSON.stringify(msg)}`);
-                } catch (e) {
-                    log(peerId, `Received: ${data}`);
-                }
-            };
-            
-            return peer;
-        }
+// new: show peer list in UI
+function updatePeerListUI(peerNum, peers) {
+  const containerId = peerNum === 1 ? 'peer1' : 'peer2';
+  const container = document.getElementById(containerId);
+  let list = container.querySelector('.peers-list');
+  if (!list) {
+    list = document.createElement('div');
+    list.className = 'peers-list';
+    container.appendChild(list);
+  }
+  list.innerHTML = `<b>Peers:</b> ${peers.map(p => `<span class="peer-id">${p.peerId}</span>`).join(', ')}`;
+}
 
-        // Expose functions to window for button clicks
-        window.startPeer1 = () => {
-            peer1Id = 'peer1-' + Math.random().toString(36).slice(2, 7);
-            peer1 = createPeer(peer1Id);
-            log(1, `Started as ${peer1Id}`);
-        };
+// return a signaling send function and also expose an onPeers callback
+function createSignaling(peerId, onSignal) {
+  const ws = new WebSocket(SIGNALING_WS);
+  ws.onopen = () => {
+    // Announce presence using the same MODEL_ID
+    ws.send(JSON.stringify({
+      type: 'announce',
+      infoHash: MODEL_ID,
+      from: peerId,
+    }));
+    log(peerId.startsWith('peer1') ? 1 : 2, 'Announced to signaling server');
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    log(peerId.startsWith('peer1') ? 1 : 2, `← ${msg.type} from ${msg.from || 'server'}`);
+    if (msg.type === 'peers') {
+      log(peerId.startsWith('peer1') ? 1 : 2, `Known peers: ${msg.peers.map(p => p.peerId).join(', ')}`);
+    } else if (['offer','answer','ice'].includes(msg.type)) {
+      const type = msg.type === 'ice' ? 'ice-candidate' : msg.type;
+      onSignal({ type, from: msg.from, to: peerId, data: msg.payload });
+    }
+  };
+  ws.onerror = (err) => log(peerId.startsWith('peer1') ? 1 : 2, 'WS error: ' + String(err));
+  return (msg) => {
+    const type = msg.type === 'ice-candidate' ? 'ice' : msg.type;
+    log(peerId.startsWith('peer1') ? 1 : 2, `→ ${type} to ${msg.to}`);
+    ws.send(JSON.stringify({
+      type,
+      infoHash: MODEL_ID,
+      from: msg.from,
+      to: msg.to,
+      payload: msg.data
+    }));
+  };
+}
 
-        window.startPeer2 = () => {
-            peer2Id = 'peer2-' + Math.random().toString(36).slice(2, 7);
-            peer2 = createPeer(peer2Id);
-            log(2, `Started as ${peer2Id}`);
-        };
+function createPeer(peerId, uiPeerNum) {
+  const send = createSignaling(peerId,
+    (msg) => peer.handleSignal(msg),
+    (peers) => {
+      updatePeerListUI(uiPeerNum, peers);
+      // optionally auto connect to first other peer
+      const other = peers.find(p => p.peerId !== peerId);
+      if (AUTO_CONNECT && other) {
+        log(uiPeerNum, `Auto-connecting to ${other.peerId}`);
+        peer.connectTo(other.peerId);
+      }
+    },
+    (info) => {
+      // peer-joined callback
+      log(uiPeerNum, `peer-joined: ${info.peerId}`);
+    }
+  );
+  const peer = new P2PClient(peerId, send);
 
-        window.connectToPeer2 = async () => {
-            if (!peer1 || !peer2Id) {
-                log(1, 'Start both peers first!');
-                return;
-            }
-            log(1, `Connecting to ${peer2Id}...`);
-            await peer1.connectTo(peer2Id);
-        };
+  peer.onChannelOpen = () => log(uiPeerNum, 'Data channel opened! 🎉');
+  peer.onChannelClose = () => log(uiPeerNum, 'Data channel closed');
+  peer.onChannelError = (e) => log(uiPeerNum, `Data channel error: ${e}`);
+  peer.onChannelMessage = (data) => {
+    try {
+      const msg = JSON.parse(data);
+      log(uiPeerNum, `Received: ${JSON.stringify(msg)}`);
+    } catch (e) {
+      log(uiPeerNum, `Received: ${data}`);
+    }
+  };
+  return peer;
+}
 
-        // Test data channel once connected
-        function testDataChannel(peer, peerId) {
-            if (peer.isDataChannelOpen()) {
-                peer.send({ type: 'test', message: `Hello from ${peerId}!` });
-            }
-        }
-    </script>
-</body>
-</html>
+// wire the buttons
+window.startPeer1 = () => {
+  myPeerId1 = 'peer1-' + Math.random().toString(36).slice(2, 7);
+  peer1 = createPeer(myPeerId1, 1);
+  log(1, `Started as ${myPeerId1}`);
+};
+
+window.startPeer2 = () => {
+  myPeerId2 = 'peer2-' + Math.random().toString(36).slice(2, 7);
+  peer2 = createPeer(myPeerId2, 2);
+  log(2, `Started as ${myPeerId2}`);
+};
+
+window.connectToPeer2 = async () => {
+  if (!peer1) { log(1, 'Start Peer 1 first'); return; }
+  try {
+    const res = await fetch(`${SIGNALING_ORIGIN}/peers?infoHash=${encodeURIComponent(MODEL_ID)}`);
+    if (!res.ok) { throw new Error('HTTP ' + res.status); }
+    const body = await res.json();
+    log(1, `HTTP /peers => ${JSON.stringify(body.peers.map(p=>p.peerId))}`);
+    const other = body.peers.find((p) => p.peerId !== peer1.localId && p.peerId !== undefined);
+    if (!other) { log(1, 'No remote peer found via HTTP /peers'); return; }
+    log(1, `Connecting to discovered peer ${other.peerId}`);
+    await peer1.connectTo(other.peerId);
+  } catch (e) {
+    log(1, 'Error fetching peers: ' + String(e));
+  }
+};
+</script>
