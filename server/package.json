@@ -4,15 +4,26 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "dev": "ts-node --transpile-only signaling-server.ts",
+  "test": "node -r ts-node/register -e \"require('./signaling-server-test.ts')\"",
+  "start": "node dist/signaling-server.js",
+  "build": "tsc -p ../tsconfig.json --outDir dist"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "uuid": "^13.0.0",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.0",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

@@ -1,7 +1,9 @@
-import http from "http";
-import express from "express";
-import cors from "cors";
-import WebSocket, { WebSocketServer } from "ws";
+const http = require("http");
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const { WebSocketServer } = require("ws");
+// (no explicit WebSocket alias — rely on runtime `ws` import and `any` for untyped values)
 
 type PeerInfo = {
   peerId: string;
@@ -22,26 +24,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// serve static files (use absolute path so running from `server/` or repo root works)
+const publicDir = path.join(process.cwd(), "public");
+try {
+  app.use(express.static(publicDir));
+} catch (e) {
+  console.error("Failed to mount static public dir:", e);
+}
+
+console.log("starting signaling server file. publicDir=", publicDir);
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const PORT = Number(process.env.PORT || 3000);
 // infoHash -> Map(peerId -> { ws, info })
-const rooms = new Map<
-  string,
-  Map<
-    string,
-    {
-      ws: WebSocket;
-      info: PeerInfo;
-    }
-  >
->();
+const rooms = new Map<string, Map<string, { ws: any; info: PeerInfo }>>();
 
 const STALE_MS = 60_000 * 3; // 3 minutes
 
 // HTTP endpoint for lightweight peer list (useful for non-WS clients)
-app.get("/peers", (req, res) => {
+app.get("/peers", (req: any, res: any) => {
   const infoHash = String(req.query.infoHash || "");
   if (!infoHash) return res.status(400).json({ error: "missing infoHash" });
   const map = rooms.get(infoHash);
@@ -52,12 +55,12 @@ app.get("/peers", (req, res) => {
   res.json({ infoHash, peers });
 });
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws: any) => {
   // store peer's infoHash/peerId after announce
   let announcedInfoHash: string | null = null;
   let announcedPeerId: string | null = null;
 
-  ws.on("message", (raw) => {
+  ws.on("message", (raw: any) => {
     let msg: SignalMessage;
     try {
       msg = JSON.parse(String(raw));
@@ -145,7 +148,7 @@ wss.on("connection", (ws) => {
   });
 });
 
-function broadcastToRoom(infoHash: string, msg: any, except?: WebSocket) {
+function broadcastToRoom(infoHash: string, msg: any, except?: any) {
   const room = rooms.get(infoHash);
   if (!room) return;
   const raw = JSON.stringify(msg);
@@ -187,4 +190,15 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`Signaling/tracker server listening on http://localhost:${PORT}`);
   console.log(`WebSocket endpoint ws://localhost:${PORT}`);
+});
+
+// surface runtime errors so they appear in the console instead of silently failing
+server.on("error", (err: any) => {
+  console.error("HTTP Server error:", (err && (err as Error).message) || String(err));
+});
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException:", (err && (err as Error).stack) || String(err));
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
 });

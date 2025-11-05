@@ -1,5 +1,4 @@
 // run with npx ts-node src/signaling-server-test.ts
-
 import { getSystemErrorMessage } from "util";
 import WebSocket from "ws";
 
