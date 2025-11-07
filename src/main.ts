@@ -13,7 +13,6 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import "@babylonjs/core/Collisions/collisionCoordinator"; // enables collisions
 import "@babylonjs/core/Helpers/sceneHelpers"; // for inspector shortcut
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent"; // enables shadows
-import { testWithActualModel as testChunking} from "./chunking-test";
 
 import { Effect } from "@babylonjs/core/Materials/effect";
 Effect.ResetCache();

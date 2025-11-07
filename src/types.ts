@@ -12,10 +12,9 @@ export interface Peer {
 export interface Swarm {
   modelId: string;
   metadata?: ModelPackage;
-  peers: Set<string>; // peer IDs in this swarm
-  ownChunks: Set<number>; // chunks we have
-  requestedChunks: Map<number, string>; // chunkIndex → peerId we requested from
-  receivedChunks: Map<number, ModelChunk>; // completed chunks
+  ownChunks: Set<number>;
+  requestedChunks: Map<number, string>;
+  receivedChunks: Map<number, ModelChunk>;
   totalChunks: number;
   startTime?: number;
 }

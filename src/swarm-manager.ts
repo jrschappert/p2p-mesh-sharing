@@ -22,7 +22,6 @@ export class SwarmManager {
     const swarm: Swarm = {
       modelId,
       metadata,
-      peers: new Set(),
       ownChunks: new Set(chunks.map((_, idx) => idx)),
       requestedChunks: new Map(),
       receivedChunks: new Map(chunks.map(c => [c.index, c])),

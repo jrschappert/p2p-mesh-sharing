@@ -65,9 +65,6 @@ export class P2PClient {
         this.clientId = message.clientId;
         console.log('🆔 My peer ID:', this.clientId);
         break;
-      case 'scrape-response':
-        this.handleScrapeResponse(message.results);
-        break;
       case 'peer-joined-swarm':
       case 'announce-response':
         this.handleSwarmPeers(message.modelId, message.peers);
@@ -83,9 +80,6 @@ export class P2PClient {
         break;
       case 'request-connection':
         await this.webRTCHandler?.createPeerConnection(message.from, true);
-        break;
-      case 'peer-disconnect':
-        this.webRTCHandler?.handlePeerDisconnect(message.peerId);
         break;
     }
   }
@@ -134,15 +128,6 @@ export class P2PClient {
     }));
 
     console.log(`📢 Announced ${modelId} to tracker (complete: ${complete})`);
-  }
-
-  private handleScrapeResponse(results: any) {
-    Object.entries(results).forEach(([modelId, stats]: [string, any]) => {
-      console.log(`📊 Swarm ${modelId}: ${stats.seeders}S/${stats.leechers}L`);
-      if (stats.peers && stats.peers.length > 0) {
-        this.joinSwarm(modelId, stats.peers);
-      }
-    });
   }
 
   private async handleSwarmPeers(modelId: string, peers: any[]) {
@@ -288,21 +273,12 @@ export class P2PClient {
   public setOnModelReceived = (cb: (modelPackage: ModelPackage) => void) => this.onModelReceived = cb;
   public setOnDownloadProgress = (cb: (modelId: string, progress: number) => void) => this.onDownloadProgress = cb;
   public getConnectedPeers = (): string[] => Array.from(this.webRTCHandler?.getAllPeers().keys() || []);
-  public hasConnections = (): boolean => (this.webRTCHandler?.getAllPeers().size || 0) > 0;
 
   public disconnect() {
-    this.swarmManager?.getSwarms().forEach((_, modelId) => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: 'unannounce', modelId }));
-      }
-    });
     this.webRTCHandler?.disconnectAll();
     this.ws?.close();
     console.log('👋 Disconnected from all peers and tracker');
   }
-
-  public getDownloadStats = () => Array.from(this.swarmManager?.getSwarms().values() || []).filter(s => s.ownChunks.size < s.totalChunks).map(s => ({ modelId: s.modelId, progress: (s.ownChunks.size / s.totalChunks * 100).toFixed(1), chunks: `${s.ownChunks.size}/${s.totalChunks}` }));
-  public getSeedingStats = () => Array.from(this.swarmManager?.getSwarms().values() || []).filter(s => s.ownChunks.size === s.totalChunks).map(s => ({ modelId: s.modelId, chunks: s.totalChunks }));
 }
 
 export default P2PClient;

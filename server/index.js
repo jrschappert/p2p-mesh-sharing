@@ -12,24 +12,21 @@ const STALE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 console.log(`BitTorrent-style tracker started on port ${PORT}`);
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   const clientId = uuidv4();
   const clientInfo = {
     id: clientId,
     ws: ws,
-    models: new Set(),
-    connectedAt: Date.now(),
-    ip: req.socket.remoteAddress
+    models: new Set()
   };
   
   clients.set(ws, clientInfo);
 
   console.log(`Peer ${clientId} connected (${clients.size} total peers)`);
 
-  ws.send(JSON.stringify({ 
-    type: 'welcome', 
-    clientId,
-    timestamp: Date.now()
+  ws.send(JSON.stringify({
+    type: 'welcome',
+    clientId
   }));
 
   ws.on('message', (message) => {
@@ -42,18 +39,11 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // add sender ID
     parsedMessage.from = clientId;
-
-    console.log(`${clientId} → ${parsedMessage.type}`);
 
     switch (parsedMessage.type) {
       case 'announce':
         handleAnnounce(ws, clientInfo, parsedMessage);
-        break;
-
-      case 'unannounce':
-        handleUnannounce(clientInfo, parsedMessage);
         break;
 
       case 'offer':
@@ -94,17 +84,6 @@ wss.on('connection', (ws, req) => {
     });
 
     clients.delete(ws);
-
-    for (const [client, metadata] of clients.entries()) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: 'peer-disconnect', 
-          peerId: clientId,
-          timestamp: Date.now()
-        }));
-      }
-    }
-    
     console.log(`${clients.size} peers, ${swarms.size} active swarms`);
   });
 
@@ -117,7 +96,7 @@ wss.on('connection', (ws, req) => {
  * Peer announces they have a model
  */
 function handleAnnounce(ws, clientInfo, message) {
-  const { modelId, complete, chunks, uploaded, downloaded } = message;
+  const { modelId, complete, chunks } = message;
   
   if (!modelId) {
     console.error('Announce missing modelId');
@@ -135,9 +114,7 @@ function handleAnnounce(ws, clientInfo, message) {
     peerId: clientInfo.id,
     complete: complete || false,
     chunks: chunks ? new Set(chunks) : new Set(),
-    lastSeen: Date.now(),
-    uploaded: uploaded || 0,
-    downloaded: downloaded || 0
+    lastSeen: Date.now()
   });
 
   clientInfo.models.add(modelId);
@@ -162,40 +139,6 @@ function handleAnnounce(ws, clientInfo, message) {
   }, clientInfo.id);
 }
 
-/**
- * Peer leaves swarm
- */
-function handleUnannounce(clientInfo, message) {
-  const { modelId } = message;
-  
-  if (!modelId) {
-    console.error('Unannounce missing modelId');
-    return;
-  }
-
-  const swarm = swarms.get(modelId);
-  if (swarm) {
-    swarm.delete(clientInfo.id);
-    console.log(`${clientInfo.id} left swarm ${modelId}`);
-    
-    broadcastToSwarm(modelId, {
-      type: 'peer-left-swarm',
-      modelId,
-      peerId: clientInfo.id
-    }, clientInfo.id);
-    
-    if (swarm.size === 0) {
-      swarms.delete(modelId);
-      console.log(`Swarm ${modelId} is now empty`);
-    }
-  }
-
-  clientInfo.models.delete(modelId);
-}
-
-/**
- * Handle WebRTC signaling (offers, answers, ICE candidates)
- */
 function handleSignaling(ws, clientInfo, message) {
   const { to } = message;
   
@@ -209,32 +152,23 @@ function handleSignaling(ws, clientInfo, message) {
     } else {
       console.warn(`Target ${to} not found or not ready`);
     }
-    return;
-  }
-
-  // ??Broadcast to all (not typical for signaling, but supported)
-  console.log(`  📤 Broadcasting ${message.type}`);
-  for (const [client, metadata] of clients.entries()) {
-    if (client !== ws && client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(message));
-    }
   }
 }
 
 /**
  * Handle connection request - broadcast to all peers
  */
-function handleConnectionRequest(ws, clientInfo, message) {
-    console.log(`🔗 ${clientInfo.id} requesting connections`);
-  
-    for (const [client, metadata] of clients.entries()) {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-            type: 'request-connection',
-            from: clientInfo.id
-        }));
-        }
+function handleConnectionRequest(ws, clientInfo) {
+  console.log(`🔗 ${clientInfo.id} requesting connections`);
+
+  for (const [client] of clients.entries()) {
+    if (client !== ws && client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'request-connection',
+        from: clientInfo.id
+      }));
     }
+  }
 }
 
 /**
@@ -340,7 +274,7 @@ setInterval(() => {
  * Periodic stats logging
  */
 setInterval(() => {
-  console.log(`\n📊 Stats: ${clients.size} peers, ${swarms.size} active swarms`);
+  console.log(`\n� Stats: ${clients.size} peers, ${swarms.size} active swarms`);
   
   // Log top swarms
   const topSwarms = Array.from(swarms.entries())
@@ -360,43 +294,5 @@ setInterval(() => {
 /**
  * Graceful shutdown
  */
-function shutdown() {
-  console.log('\n🛑 Shutting down tracker...');
-  
-  // Notify all clients
-  for (const [ws] of clients.entries()) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ 
-        type: 'tracker-shutdown',
-        message: 'Server is shutting down'
-      }));
-      ws.close();
-    }
-  }
-
-  wss.close(() => {
-    console.log('✅ Tracker closed');
-    process.exit(0);
-  });
-
-  // Force exit after 5 seconds
-  setTimeout(() => {
-    console.log('⚠️  Forced shutdown');
-    process.exit(1);
-  }, 5000);
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-// Error handling
-process.on('uncaughtException', (err) => {
-  console.error('💥 Uncaught exception:', err);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('💥 Unhandled rejection:', reason);
-});
-
 console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}`);
 console.log(`✨ Ready to track swarms!\n`);
