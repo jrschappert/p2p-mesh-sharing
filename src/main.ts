@@ -1,5 +1,5 @@
 // Expose P2PClient test for browser console
-import "./P2PClient.test";
+import P2PClient from "./p2p-client";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
@@ -156,6 +156,18 @@ function updateHudText(isLocked: boolean) {
     hudElement.innerHTML = 'Click to Place Model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
   } else {
     hudElement.innerHTML = 'Click to lock mouse • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
+  }
+}
+
+function updateHudWithP2PStatus() {
+  const isLocked = document.pointerLockElement === canvas;
+  const peerCount = (window as any).p2pClient?.getConnectedPeers().length || 0;
+  const peerStatus = peerCount > 0 ? ` • 🌐 ${peerCount} peer${peerCount !== 1 ? 's' : ''}` : ' • 🔴 No peers';
+  
+  if (isLocked) {
+    hudElement.innerHTML = `Click to Place Model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>${peerStatus}`;
+  } else {
+    hudElement.innerHTML = `Click to lock mouse • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>${peerStatus}`;
   }
 }
 
@@ -457,7 +469,7 @@ camera.keysRight.push(68); // D
   let pendingRotation: number | null = null;
 
   // Function to load and place a model in the scene
-  async function loadAndPlaceModel(modelUrl: string) {
+  async function loadAndPlaceModel(modelUrl: string, shareWithPeers: boolean = true, prompt?: string) {
     updateProgress(97, "Loading model into scene...");
 
     if (pendingPlacement && pendingRotation !== null) {
@@ -547,6 +559,19 @@ camera.keysRight.push(68); // D
         });
         
         updateProgress(100, "Model placed successfully!");
+        
+        // Share with peers via P2P if requested
+        if (shareWithPeers && (window as any).p2pClient) {
+          console.log('📤 Sharing model with peers...');
+          await (window as any).p2pClient.shareModel(
+            modelUrl,
+            new Vector3(pendingPlacement.x, rootMesh.position.y, pendingPlacement.z),
+            new Vector3(0, rotationAngle, 0),
+            new Vector3(scale, scale, scale),
+            prompt
+          );
+          console.log('✅ Model shared with peers');
+        }
       }
     }
   }
@@ -594,13 +619,13 @@ camera.keysRight.push(68); // D
     updateProgress(10, "Loading test model...");
 
     try {
-      // Use the cached test model URL
-      const testModelUrl = "models/test_model_1.glb";
+      // Use the cached test model URL - convert to absolute URL for P2P sharing
+      const testModelUrl = new URL("models/test_model_1.glb", window.location.href).href;
       
       updateProgress(50, "Preparing test model...");
       
-      // Load and place the model
-      await loadAndPlaceModel(testModelUrl);
+      // Load and place the model and share with peers
+      await loadAndPlaceModel(testModelUrl, true, "Test Model");
       
       updateProgress(100, "Test model placed!");
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -654,8 +679,8 @@ camera.keysRight.push(68); // D
       // Generate model
       const modelUrl = await generateModelFromPrompt(prompt);
       
-      // Load and place the model
-      await loadAndPlaceModel(modelUrl);
+      // Load and place the model and share with peers
+      await loadAndPlaceModel(modelUrl, true, prompt);
       
       // Wait a moment to show 100% completion
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -705,9 +730,42 @@ camera.keysRight.push(68); // D
 
 const scene = createScene();
 
+// Initialize P2P Client for multi-tab model sharing
+const p2pClient = new P2PClient(scene, 'ws://localhost:8080');
+
+// Expose to window for debugging
+(window as any).p2pClient = p2pClient;
+
+// Setup P2P callbacks
+p2pClient.setOnPeerConnected((peerId) => {
+  console.log(`🤝 Connected to peer: ${peerId}`);
+  updateHudWithP2PStatus();
+});
+
+p2pClient.setOnPeerDisconnected((peerId) => {
+  console.log(`👋 Peer disconnected: ${peerId}`);
+  updateHudWithP2PStatus();
+});
+
+p2pClient.setOnModelReceived((modelPackage) => {
+  console.log(`📥 Received model from peer: ${modelPackage.id}`);
+  // Model is automatically loaded into scene by P2PClient
+  updateHudWithP2PStatus();
+});
+
+p2pClient.setOnDownloadProgress((modelId, progress) => {
+  console.log(`📊 Download progress for ${modelId}: ${progress.toFixed(1)}%`);
+});
+
+// Update HUD periodically to show peer status
+setInterval(() => {
+  if (document.pointerLockElement !== canvas) {
+    updateHudWithP2PStatus();
+  }
+}, 2000);
 
 engine.runRenderLoop(() => {
-  scene.render(); 
+  scene.render();
 });
 
 
