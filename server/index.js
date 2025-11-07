@@ -52,10 +52,6 @@ wss.on('connection', (ws, req) => {
         handleAnnounce(ws, clientInfo, parsedMessage);
         break;
 
-      case 'scrape':
-        handleScrape(ws, parsedMessage);
-        break;
-
       case 'unannounce':
         handleUnannounce(clientInfo, parsedMessage);
         break;
@@ -164,32 +160,6 @@ function handleAnnounce(ws, clientInfo, message) {
     peerId: clientInfo.id,
     complete: complete || false
   }, clientInfo.id);
-}
-
-/**
- * Peer asks for swarm info
- */
-function handleScrape(ws, message) {
-  const { modelIds } = message;
-  
-  if (!modelIds || !Array.isArray(modelIds)) {
-    console.error('Scrape missing or invalid modelIds');
-    return;
-  }
-  
-  const results = {};
-  
-  modelIds.forEach(modelId => {
-    const stats = getSwarmStats(modelId);
-    results[modelId] = stats;
-  });
-
-  ws.send(JSON.stringify({
-    type: 'scrape-response',
-    results
-  }));
-
-  console.log(`Scrape request for ${modelIds.length} models`);
 }
 
 /**
