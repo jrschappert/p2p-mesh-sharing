@@ -11,7 +11,7 @@
  * ```
  */
 
-import { ModelSerializer, ChunkReceiver, ModelPackage, ModelChunk } from "./model-serializer";
+import { ModelSerializer } from "./model-serializer";
 import { Vector3 } from "@babylonjs/core/Maths/math";
 
 /**
@@ -178,137 +178,7 @@ export async function testRealisticModel() {
 }
 
 /**
- * Test 3: ChunkReceiver (simulates receiving chunks)
- */
-export async function testChunkReceiver() {
-  console.log("\n=== Testing ChunkReceiver ===\n");
-  
-  // Create a model and chunk it
-  const modelUrl = createMockGLB(500); // 500KB
-  const position = new Vector3(10, 0, 10);
-  const rotation = new Vector3(0, 3.14, 0);
-  const scale = new Vector3(1.5, 1.5, 1.5);
-  
-  const { package: modelPackage, chunks } = await ModelSerializer.prepareModel(
-    modelUrl,
-    position,
-    rotation,
-    scale,
-    { prompt: "receiver test", authorId: "sender" }
-  );
-  
-  console.log(`Created ${chunks.length} chunks to receive\n`);
-  
-  // Now simulate receiving them
-  const receiver = new ChunkReceiver();
-  
-  console.log("1. Initialize with metadata...");
-  receiver.initializeModel(modelPackage);
-  console.log("✓ Initialized");
-  
-  console.log("\n2. Receiving chunks...");
-  let completedPackage: ModelPackage | null = null;
-  
-  for (let i = 0; i < chunks.length; i++) {
-    const result = receiver.receiveChunk(chunks[i]);
-    
-    // Log progress every 25%
-    if (i % Math.floor(chunks.length / 4) === 0 || result) {
-      const progress = receiver.getProgress(modelPackage.id);
-      console.log(`  Progress: ${progress.toFixed(1)}%`);
-    }
-    
-    if (result) {
-      completedPackage = result;
-      console.log("✓ All chunks received!");
-    }
-  }
-  
-  if (completedPackage) {
-    console.log("\n3. Verifying completed package...");
-    console.log(`✓ Model ID: ${completedPackage.id}`);
-    console.log(`✓ Position preserved: (${completedPackage.position.x}, ${completedPackage.position.y}, ${completedPackage.position.z})`);
-    console.log(`✓ Rotation preserved: (${completedPackage.rotation.x}, ${completedPackage.rotation.y}, ${completedPackage.rotation.z})`);
-    console.log(`✓ Scale preserved: (${completedPackage.scale.x}, ${completedPackage.scale.y}, ${completedPackage.scale.z})`);
-    
-    // Check if blob URL is created
-    const blobUrl = (completedPackage.metadata as any).blobUrl;
-    if (blobUrl) {
-      console.log(`✓ Blob URL created: ${blobUrl.substring(0, 50)}...`);
-      URL.revokeObjectURL(blobUrl);
-    }
-  } else {
-    console.error("✗ Failed to receive complete model");
-  }
-  
-  URL.revokeObjectURL(modelUrl);
-  
-  console.log("\n✅ ChunkReceiver test PASSED\n");
-}
-
-/**
- * Test 4: Out-of-order chunk delivery
- */
-export async function testOutOfOrder() {
-  console.log("\n=== Testing Out-of-Order Chunks ===\n");
-  
-  const modelUrl = createMockGLB(300); // 300KB
-  const position = new Vector3(0, 0, 0);
-  const rotation = new Vector3(0, 0, 0);
-  const scale = new Vector3(1, 1, 1);
-  
-  const { package: modelPackage, chunks } = await ModelSerializer.prepareModel(
-    modelUrl,
-    position,
-    rotation,
-    scale,
-    { prompt: "out of order test", authorId: "tester" }
-  );
-  
-  console.log(`Created ${chunks.length} chunks`);
-  
-  // Shuffle the chunks
-  const shuffled = [...chunks].sort(() => Math.random() - 0.5);
-  console.log("✓ Shuffled chunks randomly");
-  
-  // Receive in random order
-  const receiver = new ChunkReceiver();
-  receiver.initializeModel(modelPackage);
-  
-  console.log("\nReceiving in random order...");
-  let completedPackage: ModelPackage | null = null;
-  
-  for (const chunk of shuffled) {
-    const result = receiver.receiveChunk(chunk);
-    if (result) {
-      completedPackage = result;
-    }
-  }
-  
-  if (completedPackage) {
-    console.log("✓ Successfully reassembled from out-of-order chunks!");
-    
-    // Verify the data is correct
-    const blobUrl = (completedPackage.metadata as any).blobUrl;
-    const response = await fetch(blobUrl);
-    const data = await response.arrayBuffer();
-    
-    if (data.byteLength === modelPackage.metadata.totalSize) {
-      console.log("✓ Data integrity maintained!");
-    }
-    
-    URL.revokeObjectURL(blobUrl);
-  } else {
-    console.error("✗ Failed to reassemble");
-  }
-  
-  URL.revokeObjectURL(modelUrl);
-  
-  console.log("\n✅ Out-of-order test PASSED\n");
-}
-
-/**
- * Test 5: Use your actual test model
+ * Test 3: Use your actual test model
  */
 export async function testWithActualModel(modelPath: string = "models/test_model_1.glb") {
   console.log("\n=== Testing With Actual Model ===\n");
@@ -388,8 +258,6 @@ export async function runAllLocalTests() {
   try {
     await testBasicChunking();
     await testRealisticModel();
-    await testChunkReceiver();
-    await testOutOfOrder();
     
     // Uncomment to test with your actual model:
     // await testWithActualModel("models/test_model_1.glb");
@@ -410,7 +278,7 @@ export async function runAllLocalTests() {
  */
 export async function quickTest() {
   const modelUrl = createMockGLB(2000);
-  const { package: pkg, chunks } = await ModelSerializer.prepareModel(
+  const { chunks } = await ModelSerializer.prepareModel(
     modelUrl,
     new Vector3(0, 0, 0),
     new Vector3(0, 0, 0),
