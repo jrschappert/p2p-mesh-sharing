@@ -90,6 +90,7 @@ echo "VITE_FAL_KEY=YOUR_FAL_KEY_HERE" > .env
 If you only want to set it for one session:
 
 * macOS: `export VITE_FAL_KEY=... && npm run dev`
+`cd backend` `npm start`
 * PowerShell: `$env:VITE_FAL_KEY='...' ; npm run dev`
 
 ---
