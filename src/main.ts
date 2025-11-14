@@ -730,7 +730,7 @@ camera.keysRight.push(68); // D
 const scene = createScene();
 
 // Initialize P2P Client for multi-tab model sharing
-const p2pClient = new P2PClient(scene, 'ws://localhost:8080');
+const p2pClient = new P2PClient(scene, 'wss://p2p-mesh-sharing.onrender.com');
 
 // Expose to window for debugging
 (window as any).p2pClient = p2pClient;

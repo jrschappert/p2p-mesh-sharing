@@ -15,7 +15,7 @@ export interface SwarmAction {
 export class SwarmManager {
   private swarms = new Map<string, Swarm>();
   private readonly CHUNKS_PER_REQUEST = 5;
-  private readonly REQUEST_TIMEOUT = 15000;
+  private readonly REQUEST_TIMEOUT = 120000;
 
   constructor() {}
 

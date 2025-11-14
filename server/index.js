@@ -294,5 +294,4 @@ setInterval(() => {
 /**
  * Graceful shutdown
  */
-console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}`);
 console.log(`✨ Ready to track swarms!\n`);
