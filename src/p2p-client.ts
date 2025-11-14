@@ -4,7 +4,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import { WebRTCHandler } from './webrtc-handler';
 import * as Utils from './utils';
-import { SwarmManager } from './swarm-manager';
+import { SwarmManager, SwarmAction } from './swarm-manager';
 
 /**
  * BitTorrent-inspired P2P client for 3D model sharing. This class is the main coordinator.
@@ -26,7 +26,15 @@ export class P2PClient {
     this.scene = scene;
     this.connectToTracker(trackerUrl);
     
-    setInterval(() => this.swarmManager?.maintainSwarms(), 15000);
+    setInterval(() => {
+      if (this.swarmManager && this.webRTCHandler) {
+        const actions = this.swarmManager.maintainSwarms(
+          this.getPeerBitfields(),
+          this.getPeerLastActivity()
+        );
+        this.executeActions(actions);
+      }
+    }, 15000);
   }
 
   private connectToTracker(url: string) {
@@ -36,7 +44,7 @@ export class P2PClient {
     this.ws.onopen = () => {
       console.log('✅ Connected to tracker');
       this.webRTCHandler = new WebRTCHandler(this.ws!);
-      this.swarmManager = new SwarmManager(this.webRTCHandler);
+      this.swarmManager = new SwarmManager();
       this.setupWebRTCHandlerCallbacks();
       
       setTimeout(() => {
@@ -106,10 +114,16 @@ export class P2PClient {
         this.handleHave(peerId, message);
         break;
       case 'request':
-        this.swarmManager?.handleRequest(peerId, message, this.sendPiece.bind(this));
+        const requestAction = this.swarmManager?.handleRequest(peerId, message);
+        if (requestAction) {
+          this.executeActions([requestAction]);
+        }
         break;
       case 'piece':
-        this.swarmManager?.handlePiece(peerId, message, this.handleDownloadComplete.bind(this), this.onDownloadProgress!, this.broadcastHave.bind(this));
+        const pieceActions = this.swarmManager?.handlePiece(peerId, message, this.getPeerBitfields());
+        if (pieceActions) {
+          this.executeActions(pieceActions);
+        }
         break;
       case 'metadata':
         this.handleMetadata(peerId, message);
@@ -177,10 +191,14 @@ export class P2PClient {
     const { modelId, bitfield } = message;
     const peer = this.webRTCHandler?.getPeer(peerId);
     if (!peer) return;
-    peer.bitfield.set(modelId, new Uint8Array(bitfield));
+    const bitfieldArray = new Uint8Array(bitfield);
+    peer.bitfield.set(modelId, bitfieldArray);
     console.log(`📊 Received bitfield from ${peerId} for ${modelId}`);
     if (this.swarmManager?.getSwarms().has(modelId)) {
-      this.swarmManager?.requestChunksFromPeer(peerId, modelId);
+      const actions = this.swarmManager?.requestChunksFromPeer(peerId, modelId, bitfieldArray);
+      if (actions) {
+        this.executeActions(actions);
+      }
     }
   }
 
@@ -197,7 +215,46 @@ export class P2PClient {
     }
     Utils.setBit(bitfield, chunkIndex);
     console.log(`📣 Peer ${peerId} now has chunk ${chunkIndex} of ${modelId}`);
-    this.swarmManager?.requestChunksFromPeer(peerId, modelId);
+    const actions = this.swarmManager?.requestChunksFromPeer(peerId, modelId, bitfield);
+    if (actions) {
+      this.executeActions(actions);
+    }
+  }
+
+  // Execute actions returned by SwarmManager
+  private executeActions(actions: SwarmAction[]) {
+    for (const action of actions) {
+      switch (action.type) {
+        case 'request_chunk':
+          this.requestChunk(action.peerId!, action.modelId, action.chunkIndex!);
+          break;
+        case 'send_piece':
+          this.sendPiece(action.peerId!, action.modelId, action.chunk!);
+          break;
+        case 'broadcast_have':
+          this.broadcastHave(action.modelId, action.chunkIndex!);
+          break;
+        case 'download_complete':
+          this.handleDownloadComplete(action.modelId);
+          break;
+        case 'download_progress':
+          this.onDownloadProgress?.(action.modelId, action.progress!);
+          break;
+      }
+    }
+  }
+
+  private requestChunk(peerId: string, modelId: string, chunkIndex: number) {
+    const peer = this.webRTCHandler?.getPeer(peerId);
+    if (!peer?.dataChannel || peer.dataChannel.readyState !== 'open') return;
+
+    peer.dataChannel.send(JSON.stringify({
+      type: 'request',
+      modelId,
+      chunkIndex
+    }));
+
+    console.log(`📥 Requesting chunk ${chunkIndex} from ${peerId}`);
   }
 
   private sendPiece(peerId: string, modelId: string, chunk: ModelChunk) {
@@ -219,6 +276,25 @@ export class P2PClient {
         peer.dataChannel.send(JSON.stringify({ type: 'have', modelId, chunkIndex }));
       }
     });
+  }
+
+  // Helper methods to extract peer data for SwarmManager
+  private getPeerBitfields(): Map<string, Map<string, Uint8Array>> {
+    const bitfields = new Map<string, Map<string, Uint8Array>>();
+    this.webRTCHandler?.getAllPeers().forEach((peer, peerId) => {
+      if (peer.dataChannel?.readyState === 'open') {
+        bitfields.set(peerId, peer.bitfield);
+      }
+    });
+    return bitfields;
+  }
+
+  private getPeerLastActivity(): Map<string, number> {
+    const lastActivity = new Map<string, number>();
+    this.webRTCHandler?.getAllPeers().forEach((peer, peerId) => {
+      lastActivity.set(peerId, peer.lastActivity);
+    });
+    return lastActivity;
   }
 
   private async handleDownloadComplete(modelId: string) {
@@ -264,7 +340,10 @@ export class P2PClient {
     this.swarmManager?.createSwarm(modelId, metadata);
     console.log(`📥 Starting download for ${modelId}`);
     this.announceToTracker(modelId, false, []);
-    this.swarmManager?.requestMoreChunks(modelId);
+    const actions = this.swarmManager?.requestMoreChunks(modelId, this.getPeerBitfields());
+    if (actions) {
+      this.executeActions(actions);
+    }
   }
 
   // Public API
