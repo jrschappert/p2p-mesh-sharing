@@ -1,0 +1,197 @@
+import { ModelPackage, ModelChunk, ModelSerializer } from './model-serializer';
+import { Swarm } from './types';
+import * as Utils from './utils';
+
+// Action types that SwarmManager returns for P2PClient to execute
+export interface SwarmAction {
+  type: 'request_chunk' | 'broadcast_have' | 'send_piece' | 'download_complete' | 'download_progress';
+  peerId?: string;
+  modelId: string;
+  chunkIndex?: number;
+  chunk?: ModelChunk;
+  progress?: number;
+}
+
+export class SwarmManager {
+  private swarms = new Map<string, Swarm>();
+  private readonly CHUNKS_PER_REQUEST = 5;
+  private readonly REQUEST_TIMEOUT = 15000;
+
+  constructor() {}
+
+  public getSwarms(): Map<string, Swarm> {
+    return this.swarms;
+  }
+
+  public createSwarm(modelId: string, metadata: ModelPackage, chunks: ModelChunk[] = []) {
+    const isSeeder = chunks.length > 0;
+    const swarm: Swarm = {
+      modelId,
+      metadata,
+      ownChunks: new Set(chunks.map((_, idx) => idx)),
+      requestedChunks: new Map(),
+      receivedChunks: new Map(chunks.map(c => [c.index, c])),
+      totalChunks: isSeeder ? chunks.length : metadata.metadata.totalChunks,
+      startTime: isSeeder ? undefined : Date.now()
+    };
+    this.swarms.set(modelId, swarm);
+    return swarm;
+  }
+
+  public handlePiece(peerId: string, message: any, peerBitfields: Map<string, Map<string, Uint8Array>>): SwarmAction[] {
+    const { modelId, chunkIndex, data, checksum } = message;
+    const actions: SwarmAction[] = [];
+    
+    const swarm = this.swarms.get(modelId);
+    if (!swarm) return actions;
+
+    const chunk: ModelChunk = {
+      modelId,
+      index: chunkIndex,
+      total: swarm.totalChunks,
+      data: Utils.base64ToArrayBuffer(data),
+      checksum
+    };
+
+    if (!ModelSerializer.verifyChunk(chunk)) {
+      console.error(`❌ Chunk ${chunkIndex} failed verification`);
+      swarm.requestedChunks.delete(chunkIndex);
+      return actions;
+    }
+
+    swarm.receivedChunks.set(chunkIndex, chunk);
+    swarm.ownChunks.add(chunkIndex);
+    swarm.requestedChunks.delete(chunkIndex);
+
+    console.log(`✅ Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
+
+    // Action: broadcast have
+    actions.push({ type: 'broadcast_have', modelId, chunkIndex });
+
+    // Action: report progress
+    const progress = swarm.ownChunks.size / swarm.totalChunks * 100;
+    actions.push({ type: 'download_progress', modelId, progress });
+
+    // Action: download complete or request more
+    if (swarm.ownChunks.size === swarm.totalChunks) {
+      actions.push({ type: 'download_complete', modelId });
+    } else {
+      actions.push(...this.requestMoreChunks(modelId, peerBitfields));
+    }
+
+    return actions;
+  }
+
+  public requestMoreChunks(modelId: string, peerBitfields: Map<string, Map<string, Uint8Array>>): SwarmAction[] {
+    const swarm = this.swarms.get(modelId);
+    const actions: SwarmAction[] = [];
+    if (!swarm) return actions;
+
+    const needed: number[] = [];
+    for (let i = 0; i < swarm.totalChunks; i++) {
+      if (!swarm.ownChunks.has(i) && !swarm.requestedChunks.has(i)) {
+        needed.push(i);
+      }
+    }
+
+    if (needed.length === 0) return actions;
+
+    // Calculate rarity for each needed chunk
+    const rarity = new Map<number, number>();
+    needed.forEach(chunkIdx => {
+      let count = 0;
+      peerBitfields.forEach(bitfields => {
+        const bitfield = bitfields.get(modelId);
+        if (bitfield && Utils.hasBit(bitfield, chunkIdx)) {
+          count++;
+        }
+      });
+      rarity.set(chunkIdx, count);
+    });
+
+    // Sort by rarity (rarest first)
+    needed.sort((a, b) => (rarity.get(a) || 0) - (rarity.get(b) || 0));
+
+    // Generate request actions for each peer
+    peerBitfields.forEach((bitfields, peerId) => {
+      const bitfield = bitfields.get(modelId);
+      if (!bitfield) return;
+
+      const peerRequests = Array.from(swarm.requestedChunks.values())
+        .filter(p => p === peerId).length;
+
+      if (peerRequests >= this.CHUNKS_PER_REQUEST) return;
+
+      for (const chunkIdx of needed) {
+        if (peerRequests >= this.CHUNKS_PER_REQUEST) break;
+        
+        if (Utils.hasBit(bitfield, chunkIdx) && !swarm.requestedChunks.has(chunkIdx)) {
+          actions.push({ type: 'request_chunk', peerId, modelId, chunkIndex: chunkIdx });
+          swarm.requestedChunks.set(chunkIdx, peerId);
+          break;
+        }
+      }
+    });
+
+    return actions;
+  }
+
+  public requestChunksFromPeer(peerId: string, modelId: string, peerBitfield: Uint8Array): SwarmAction[] {
+    const swarm = this.swarms.get(modelId);
+    const actions: SwarmAction[] = [];
+    if (!swarm) return actions;
+
+    for (let i = 0; i < swarm.totalChunks; i++) {
+      if (!swarm.ownChunks.has(i) &&
+          !swarm.requestedChunks.has(i) &&
+          Utils.hasBit(peerBitfield, i)) {
+        actions.push({ type: 'request_chunk', peerId, modelId, chunkIndex: i });
+        swarm.requestedChunks.set(i, peerId);
+        break;
+      }
+    }
+
+    return actions;
+  }
+
+  public handleRequest(peerId: string, message: any): SwarmAction | null {
+    const { modelId, chunkIndex } = message;
+    
+    const swarm = this.swarms.get(modelId);
+    if (!swarm || !swarm.ownChunks.has(chunkIndex)) {
+      console.warn(`We don't have chunk ${chunkIndex}`);
+      return null;
+    }
+
+    const chunk = swarm.receivedChunks.get(chunkIndex);
+    if (!chunk) {
+      console.warn(`Chunk ${chunkIndex} not found in storage`);
+      return null;
+    }
+
+    return { type: 'send_piece', peerId, modelId, chunk };
+  }
+
+  public maintainSwarms(peerBitfields: Map<string, Map<string, Uint8Array>>, peerLastActivity: Map<string, number>): SwarmAction[] {
+    const now = Date.now();
+    const actions: SwarmAction[] = [];
+
+    this.swarms.forEach((swarm, modelId) => {
+      // Check for timed out requests
+      swarm.requestedChunks.forEach((peerId, chunkIndex) => {
+        const lastActivity = peerLastActivity.get(peerId);
+        if (!lastActivity || now - lastActivity > this.REQUEST_TIMEOUT) {
+          console.warn(`⚠️ Request timeout for chunk ${chunkIndex} from ${peerId}`);
+          swarm.requestedChunks.delete(chunkIndex);
+        }
+      });
+
+      // Request more if needed
+      if (swarm.ownChunks.size < swarm.totalChunks) {
+        actions.push(...this.requestMoreChunks(modelId, peerBitfields));
+      }
+    });
+
+    return actions;
+  }
+}
