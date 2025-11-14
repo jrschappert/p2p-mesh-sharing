@@ -1,15 +1,13 @@
 import { Peer } from './types';
 
-const RTC_CONFIG: RTCConfiguration = {  
+const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    { urls: ['stun:stun.services.mozilla.com:3478'] }, // firefox public STUN
-    // Add your TURN server (recommended for production):
-    {
-      urls: ['turn:your.turn.server:3478?transport=udp', 'turn:your.turn.server:3478?transport=tcp'],
-      username: 'turnuser',
-      credential: 'turnpass'
-    }
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.voiparound.com' },
+    { urls: 'stun:stun.voipbuster.com' },
+    { urls: 'stun:stun.voipstunt.com' },
+    { urls: 'stun:stun.voxgratia.org' },
+    { urls: 'stun:stun.l.google.com:19302' }
   ]
 };
 
