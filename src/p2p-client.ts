@@ -22,7 +22,7 @@ export class P2PClient {
   private onModelReceived?: (modelPackage: ModelPackage) => void;
   private onDownloadProgress?: (modelId: string, progress: number) => void;
   
-  constructor(scene: Scene, trackerUrl: string = 'ws://localhost:8080') {
+  constructor(scene: Scene, trackerUrl: string = 'wss://p2p-mesh-sharing.onrender.com') {
     this.scene = scene;
     this.connectToTracker(trackerUrl);
     
