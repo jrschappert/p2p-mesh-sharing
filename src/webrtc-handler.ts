@@ -5,6 +5,9 @@ const getRTCConfig = (): RTCConfiguration => {
 
   if (import.meta.env.VITE_STUN_URL) {
     iceServers.push({ urls: import.meta.env.VITE_STUN_URL });
+    console.log('✅ STUN server configured:', import.meta.env.VITE_STUN_URL);
+  } else {
+    console.warn('⚠️ No STUN server configured!');
   }
 
   if (import.meta.env.VITE_TURN_URLS) {
@@ -16,8 +19,16 @@ const getRTCConfig = (): RTCConfiguration => {
         credential: import.meta.env.VITE_TURN_CREDENTIAL,
       });
     }
+    console.log('✅ TURN servers configured:', turnUrls.length, 'server(s)');
+    console.log('   URLs:', turnUrls);
+    console.log('   Username:', import.meta.env.VITE_TURN_USERNAME);
+    console.log('   Credential:', import.meta.env.VITE_TURN_CREDENTIAL ? '***' : 'MISSING!');
+  } else {
+    console.error('❌ NO TURN SERVERS CONFIGURED! Cross-network connections WILL FAIL!');
+    console.error('   Add VITE_TURN_URLS to your .env file');
   }
 
+  console.log('🔧 Final ICE servers:', iceServers);
   return { iceServers };
 };
 
@@ -71,17 +82,36 @@ export class WebRTCHandler {
       lastActivity: Date.now()
     };
 
+    // Track candidate types for this peer
+    const candidateTypes = new Set<string>();
+
     // ICE candidate handler
     pc.onicecandidate = (event) => {
       if (event.candidate && this.ws) {
-        console.log(`🧊 Sending ICE candidate to ${peerId} (type: ${event.candidate.type})`);
+        const candidateType = event.candidate.type || 'unknown';
+        const candidateStr = event.candidate.candidate || '';
+        
+        if (candidateType !== 'unknown') {
+          candidateTypes.add(candidateType);
+        }
+        
+        console.log(`🧊 ICE candidate for ${peerId}:`, {
+          type: candidateType,
+          protocol: candidateStr.includes('udp') ? 'UDP' : candidateStr.includes('tcp') ? 'TCP' : 'unknown',
+          relay: candidateType === 'relay' ? '✅ TURN' : '❌ Direct'
+        });
+        
         this.ws.send(JSON.stringify({
           type: 'ice-candidate',
           to: peerId,
           candidate: event.candidate
         }));
       } else if (!event.candidate) {
-        console.log(`🧊 ICE gathering complete for ${peerId}`);
+        const hasRelay = candidateTypes.has('relay');
+        console.log(`🧊 ICE gathering complete for ${peerId}:`, {
+          candidateTypes: Array.from(candidateTypes),
+          usingTURN: hasRelay ? '✅ YES' : '❌ NO - Will fail across networks!'
+        });
       }
     };
 
