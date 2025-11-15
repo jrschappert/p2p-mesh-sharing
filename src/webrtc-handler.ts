@@ -1,19 +1,32 @@
 import { Peer } from './types';
 
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.stunprotocol.org:3478' },
-    { urls: 'stun:stun.voiparound.com' },
-    { urls: 'stun:stun.voipbuster.com' },
-    { urls: 'stun:stun.voipstunt.com' },
-    { urls: 'stun:stun.voxgratia.org' },
-    { urls: 'stun:stun.l.google.com:19302' }
-  ]
+const getRTCConfig = (): RTCConfiguration => {
+  const iceServers: RTCIceServer[] = [];
+
+  if (import.meta.env.VITE_STUN_URL) {
+    iceServers.push({ urls: import.meta.env.VITE_STUN_URL });
+  }
+
+  if (import.meta.env.VITE_TURN_URLS) {
+    const turnUrls = import.meta.env.VITE_TURN_URLS.split(',');
+    for (const url of turnUrls) {
+      iceServers.push({
+        urls: url,
+        username: import.meta.env.VITE_TURN_USERNAME,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL,
+      });
+    }
+  }
+
+  return { iceServers };
 };
+
+const RTC_CONFIG = getRTCConfig();
 
 export class WebRTCHandler {
   private peers = new Map<string, Peer>();
   private ws: WebSocket;
+  private rtcConfig: RTCConfiguration;
   private readonly MAX_PEERS = 50;
 
   // Callbacks to communicate with P2PClient
@@ -22,8 +35,9 @@ export class WebRTCHandler {
   public onDataChannelMessage: (peerId: string, data: any) => void = () => {};
   public onDataChannelOpen: (peerId: string) => void = () => {};
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, rtcConfig: RTCConfiguration = RTC_CONFIG) {
     this.ws = ws;
+    this.rtcConfig = rtcConfig;
   }
 
   public getPeer(peerId: string): Peer | undefined {
@@ -46,7 +60,7 @@ export class WebRTCHandler {
 
     console.log(`🤝 Creating connection with ${peerId} (initiator: ${isInitiator})`);
 
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(this.rtcConfig);
     const peer: Peer = {
       id: peerId,
       connection: pc,
