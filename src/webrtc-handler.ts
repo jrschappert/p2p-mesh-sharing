@@ -182,12 +182,24 @@ export class WebRTCHandler {
   }
 
   private setupDataChannel(peerId: string, channel: RTCDataChannel) {
-    console.log(`📡 Setting up data channel for ${peerId} (state: ${channel.readyState})`);
+    console.log(`📡 Setting up data channel for ${peerId} (current state: ${channel.readyState})`);
     channel.binaryType = 'arraybuffer';
 
+    // Track state changes
+    let openTimestamp: number | null = null;
+
     channel.onopen = () => {
-      console.log(`✅ Data channel OPEN with ${peerId}`);
+      openTimestamp = Date.now();
+      console.log(`✅ ✅ ✅ Data channel OPEN with ${peerId} ✅ ✅ ✅`);
       this.onDataChannelOpen(peerId);
+      
+      // Test send immediately
+      try {
+        channel.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+        console.log(`🏓 Sent test ping to ${peerId}`);
+      } catch (error) {
+        console.error(`❌ Failed to send test ping to ${peerId}:`, error);
+      }
     };
 
     channel.onmessage = (event) => {
@@ -196,26 +208,45 @@ export class WebRTCHandler {
         peer.lastActivity = Date.now();
       }
       
-      // Log first 100 chars of message for debugging
-      const preview = typeof event.data === 'string' 
-        ? event.data.substring(0, 100) 
-        : `[Binary: ${event.data.byteLength} bytes]`;
-      console.log(`📨 Message from ${peerId}: ${preview}${preview.length >= 100 ? '...' : ''}`);
+      // Log message receipt with timing
+      const timeSinceOpen = openTimestamp ? Date.now() - openTimestamp : 'N/A';
+      
+      // Parse and log message type
+      let messageInfo = '';
+      try {
+        if (typeof event.data === 'string') {
+          const parsed = JSON.parse(event.data);
+          messageInfo = `type: ${parsed.type}`;
+          
+          // Special handling for test ping
+          if (parsed.type === 'ping') {
+            console.log(`🏓 Received test ping from ${peerId}`);
+            return; // Don't process further
+          }
+        } else {
+          messageInfo = `[Binary: ${event.data.byteLength} bytes]`;
+        }
+      } catch (e) {
+        messageInfo = '[Parse error]';
+      }
+      
+      console.log(`📨 <<<< Message from ${peerId} (${timeSinceOpen}ms since open): ${messageInfo}`);
       
       this.onDataChannelMessage(peerId, event.data);
     };
 
     channel.onerror = (error) => {
-      console.error(`❌ Data channel error with ${peerId}:`, error);
+      console.error(`❌ ❌ ❌ Data channel ERROR with ${peerId}:`, error);
     };
 
     channel.onclose = () => {
-      console.log(`📡 Data channel closed with ${peerId}`);
+      console.log(`📡 Data channel CLOSED with ${peerId}`);
     };
 
     // If channel is already open, trigger the callback immediately
     if (channel.readyState === 'open') {
-      console.log(`📡 Data channel already open with ${peerId}, triggering callback`);
+      console.log(`📡 Data channel already open with ${peerId}, triggering callback immediately`);
+      openTimestamp = Date.now();
       this.onDataChannelOpen(peerId);
     }
   }
