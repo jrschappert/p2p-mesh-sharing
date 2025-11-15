@@ -72,6 +72,7 @@ export class WebRTCHandler {
 
     pc.onicecandidate = (event) => {
       if (event.candidate && this.ws) {
+        console.log(`ICE candidate type for ${peerId}: ${event.candidate.type}`);
         this.ws.send(JSON.stringify({
           type: 'ice-candidate',
           to: peerId,
