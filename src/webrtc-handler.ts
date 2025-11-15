@@ -14,13 +14,13 @@ const getRTCConfig = (): RTCConfiguration => {
     const turnUrls = import.meta.env.VITE_TURN_URLS.split(',');
     for (const url of turnUrls) {
       iceServers.push({
-        urls: url,
+        urls: url.trim(),
         username: import.meta.env.VITE_TURN_USERNAME,
         credential: import.meta.env.VITE_TURN_CREDENTIAL,
       });
     }
     console.log('✅ TURN servers configured:', turnUrls.length, 'server(s)');
-    console.log('   URLs:', turnUrls);
+    console.log('   URLs:', turnUrls.map((u: string) => u.trim()));
     console.log('   Username:', import.meta.env.VITE_TURN_USERNAME);
     console.log('   Credential:', import.meta.env.VITE_TURN_CREDENTIAL ? '***' : 'MISSING!');
   } else {
@@ -28,9 +28,57 @@ const getRTCConfig = (): RTCConfiguration => {
     console.error('   Add VITE_TURN_URLS to your .env file');
   }
 
-  console.log('🔧 Final ICE servers:', iceServers);
-  return { iceServers };
+  console.log('🔧 Final ICE servers config:', iceServers);
+  
+  // Test TURN connectivity
+  if (iceServers.length > 0) {
+    testTURNConnectivity(iceServers);
+  }
+  
+  return { 
+    iceServers,
+    iceCandidatePoolSize: 10, // Gather more candidates
+    iceTransportPolicy: 'all' // Try all connection types including relay
+  };
 };
+
+// Test if TURN servers are reachable
+async function testTURNConnectivity(iceServers: RTCIceServer[]) {
+  console.log('🧪 Testing TURN server connectivity...');
+  
+  const pc = new RTCPeerConnection({ iceServers });
+  const candidateTypes = new Set<string>();
+  
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      const type = event.candidate.type || 'unknown';
+      candidateTypes.add(type);
+      console.log(`🧪 Test candidate type: ${type}`);
+    } else {
+      const hasRelay = candidateTypes.has('relay');
+      console.log('🧪 TURN test result:', {
+        candidateTypes: Array.from(candidateTypes),
+        turnWorking: hasRelay ? '✅ YES - TURN is working!' : '❌ NO - TURN not reachable!'
+      });
+      
+      if (!hasRelay) {
+        console.error('❌ TURN servers are configured but not generating relay candidates!');
+        console.error('   Possible issues:');
+        console.error('   1. Firewall blocking TURN server ports (80, 443)');
+        console.error('   2. Invalid TURN credentials');
+        console.error('   3. TURN server is down');
+        console.error('   4. Network configuration blocking TURN protocol');
+      }
+      
+      pc.close();
+    }
+  };
+  
+  // Create a dummy data channel to trigger ICE gathering
+  pc.createDataChannel('test');
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+}
 
 const RTC_CONFIG = getRTCConfig();
 
