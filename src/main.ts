@@ -336,7 +336,7 @@ async function generateModelFromPrompt(prompt: string): Promise<string> {
   const imageUrl = await generateFluxImage(prompt);
   console.log("Image generated:", imageUrl);
 
-  console.log("🧩 Converting to 3D with Trellis...");
+  console.log("Converting to 3D with Trellis...");
   const modelUrl = await generateTrellisModel(imageUrl);
   console.log("Model generated:", modelUrl);
 
@@ -730,7 +730,7 @@ camera.keysRight.push(68); // D
 const scene = createScene();
 
 // Initialize P2P Client for multi-tab model sharing
-const p2pClient = new P2PClient(scene, 'wss://p2p-mesh-sharing.onrender.com');
+const p2pClient = new P2PClient(scene);
 
 // Expose to window for debugging
 (window as any).p2pClient = p2pClient;
@@ -758,9 +758,7 @@ p2pClient.setOnDownloadProgress((modelId, progress) => {
 
 // Update HUD periodically to show peer status
 setInterval(() => {
-  if (document.pointerLockElement !== canvas) {
-    updateHudWithP2PStatus();
-  }
+  updateHudWithP2PStatus();
 }, 2000);
 
 engine.runRenderLoop(() => {

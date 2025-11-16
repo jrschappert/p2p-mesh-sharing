@@ -159,7 +159,7 @@ function handleSignaling(ws, clientInfo, message) {
  * Handle connection request - broadcast to all peers
  */
 function handleConnectionRequest(ws, clientInfo) {
-  console.log(`🔗 ${clientInfo.id} requesting connections`);
+  console.log(`${clientInfo.id} requesting connections`);
 
   for (const [client] of clients.entries()) {
     if (client !== ws && client.readyState === WebSocket.OPEN) {
@@ -251,7 +251,7 @@ setInterval(() => {
   swarms.forEach((swarm, modelId) => {
     swarm.forEach((peerInfo, peerId) => {
       if (now - peerInfo.lastSeen > STALE_TIMEOUT) {
-        console.log(`🧹 Removing stale peer ${peerId} from swarm ${modelId}`);
+        console.log(`Removing stale peer ${peerId} from swarm ${modelId}`);
         swarm.delete(peerId);
         
         // Notify swarm
@@ -274,7 +274,7 @@ setInterval(() => {
  * Periodic stats logging
  */
 setInterval(() => {
-  console.log(`\n� Stats: ${clients.size} peers, ${swarms.size} active swarms`);
+  console.log(`\n Stats: ${clients.size} peers, ${swarms.size} active swarms`);
   
   // Log top swarms
   const topSwarms = Array.from(swarms.entries())

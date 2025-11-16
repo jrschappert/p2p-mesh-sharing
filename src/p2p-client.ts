@@ -25,9 +25,10 @@ export class P2PClient {
   private onModelReceived?: (modelPackage: ModelPackage) => void;
   private onDownloadProgress?: (modelId: string, progress: number) => void;
   
-  constructor(scene: Scene, trackerUrl: string = 'wss://p2p-mesh-sharing.onrender.com') {
+  constructor(scene: Scene) {
     this.scene = scene;
-    this.connectToTracker(trackerUrl);
+    const url = import.meta.env.VITE_WEBSOCKET_URL || 'wss://p2p-mesh-sharing.onrender.com';
+    this.connectToTracker(url);
     
     setInterval(() => {
       if (this.swarmManager && this.webRTCHandler) {
@@ -80,6 +81,10 @@ export class P2PClient {
       case 'peer-joined-swarm':
       case 'announce-response':
         this.handleSwarmPeers(message.modelId, message.peers);
+        break;
+      case 'peer-left-swarm':
+        console.log(`Peer ${message.peerId} left swarm ${message.modelId}, disconnecting.`);
+        this.webRTCHandler?.handlePeerDisconnect(message.peerId);
         break;
       case 'offer':
         await this.webRTCHandler?.handleOffer(message.from, message.offer);

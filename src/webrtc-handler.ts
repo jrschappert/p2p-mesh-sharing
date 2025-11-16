@@ -173,7 +173,7 @@ export class WebRTCHandler {
 
     // Connection state handler
     pc.onconnectionstatechange = () => {
-      console.log(`🔗 Connection state for ${peerId}: ${pc.connectionState}`);
+      console.log(`Connection state for ${peerId}: ${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
         console.log(`Peer connection established with ${peerId}`);
         this.onPeerConnected(peerId);
