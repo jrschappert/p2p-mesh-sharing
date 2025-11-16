@@ -176,7 +176,7 @@ updateHudText(false);
 // Listen for pointer lock changes
 document.addEventListener('pointerlockchange', () => {
   const isLocked = document.pointerLockElement === canvas;
-  updateHudText(isLocked);
+  updateHudWithP2PStatus();
 });
 
 

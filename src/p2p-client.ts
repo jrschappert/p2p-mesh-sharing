@@ -39,6 +39,11 @@ export class P2PClient {
         this.executeActions(actions);
       }
     }, 15000);
+    
+    // Handle tab/window close to properly disconnect
+    window.addEventListener('beforeunload', () => {
+      this.disconnect();
+    });
   }
 
   private connectToTracker(url: string) {
