@@ -54,7 +54,7 @@ export class SwarmManager {
     };
 
     if (!ModelSerializer.verifyChunk(chunk)) {
-      console.error(`❌ Chunk ${chunkIndex} failed verification`);
+      console.error(`Chunk ${chunkIndex} failed verification`);
       swarm.requestedChunks.delete(chunkIndex);
       return actions;
     }
@@ -63,7 +63,7 @@ export class SwarmManager {
     swarm.ownChunks.add(chunkIndex);
     swarm.requestedChunks.delete(chunkIndex);
 
-    console.log(`✅ Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
+    console.log(`Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
 
     // Action: broadcast have
     actions.push({ type: 'broadcast_have', modelId, chunkIndex });
@@ -181,7 +181,7 @@ export class SwarmManager {
       swarm.requestedChunks.forEach((peerId, chunkIndex) => {
         const lastActivity = peerLastActivity.get(peerId);
         if (!lastActivity || now - lastActivity > this.REQUEST_TIMEOUT) {
-          console.warn(`⚠️ Request timeout for chunk ${chunkIndex} from ${peerId}`);
+          console.warn(`Request timeout for chunk ${chunkIndex} from ${peerId}`);
           swarm.requestedChunks.delete(chunkIndex);
         }
       });

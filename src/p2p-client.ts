@@ -41,11 +41,11 @@ export class P2PClient {
   }
 
   private connectToTracker(url: string) {
-    console.log('🔗 Connecting to tracker...');
+    console.log('Connecting to tracker...');
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      console.log('✅ Connected to tracker');
+      console.log('Connected to tracker');
       this.webRTCHandler = new WebRTCHandler(this.ws!);
       this.swarmManager = new SwarmManager();
       this.setupWebRTCHandlerCallbacks();
@@ -54,7 +54,7 @@ export class P2PClient {
       setTimeout(() => {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'request-connection' }));
-          console.log('📡 Requesting connections to existing peers');
+          console.log('Requesting connections to existing peers');
         }
       }, 1000);
     };
@@ -64,9 +64,9 @@ export class P2PClient {
       this.handleTrackerMessage(message);
     };
 
-    this.ws.onerror = (error) => console.error('❌ Tracker error:', error);
+    this.ws.onerror = (error) => console.error('Tracker error:', error);
     this.ws.onclose = () => {
-      console.log('❌ Disconnected from tracker, reconnecting...');
+      console.log('Disconnected from tracker, reconnecting...');
       setTimeout(() => this.connectToTracker(url), 3000);
     };
   }
@@ -75,7 +75,7 @@ export class P2PClient {
     switch (message.type) {
       case 'welcome':
         this.clientId = message.clientId;
-        console.log('🆔 My peer ID:', this.clientId);
+        console.log('My peer ID:', this.clientId);
         break;
       case 'peer-joined-swarm':
       case 'announce-response':
@@ -91,7 +91,7 @@ export class P2PClient {
         await this.webRTCHandler?.handleIceCandidate(message.from, message.candidate);
         break;
       case 'request-connection':
-        console.log(`🤝 Connection request from ${message.from}`);
+        console.log(`Connection request from ${message.from}`);
         await this.webRTCHandler?.createPeerConnection(message.from, true);
         break;
     }
@@ -101,12 +101,12 @@ export class P2PClient {
     if (!this.webRTCHandler) return;
 
     this.webRTCHandler.onPeerConnected = (peerId) => {
-      console.log(`✅ Peer connection established with ${peerId}`);
+      console.log(`Peer connection established with ${peerId}`);
       this.onPeerConnected?.(peerId);
     };
     
     this.webRTCHandler.onPeerDisconnected = (peerId) => {
-      console.log(`❌ Peer disconnected: ${peerId}`);
+      console.log(`Peer disconnected: ${peerId}`);
       // Clear any pending metadata sends for this peer
       const timeout = this.pendingMetadataSends.get(peerId);
       if (timeout) {
@@ -137,7 +137,7 @@ export class P2PClient {
 
     // Max 3 retry attempts
     if (attemptNumber > 3) {
-      console.log(`⚠️ Gave up retrying metadata send to ${peerId} after 3 attempts`);
+      console.log(`Gave up retrying metadata send to ${peerId} after 3 attempts`);
       this.pendingMetadataSends.delete(peerId);
       return;
     }
@@ -147,11 +147,11 @@ export class P2PClient {
     const timeout = setTimeout(() => {
       const peer = this.webRTCHandler?.getPeer(peerId);
       if (peer?.dataChannel?.readyState === 'open') {
-        console.log(`🔄 Retry #${attemptNumber}: Sending metadata to ${peerId}`);
+        console.log(`Retry #${attemptNumber}: Sending metadata to ${peerId}`);
         this.sendAllMetadata(peerId);
         this.scheduleMetadataRetry(peerId, attemptNumber + 1);
       } else {
-        console.log(`⏭️ Skipping retry for ${peerId} - channel not open`);
+        console.log(`Skipping retry for ${peerId} - channel not open`);
         this.pendingMetadataSends.delete(peerId);
       }
     }, delay);
@@ -202,7 +202,7 @@ export class P2PClient {
   private async handleSwarmPeers(modelId: string, peers: any[]) {
     if (!peers || peers.length === 0) return;
     
-    console.log(`🔗 Swarm update for ${modelId}: ${peers.length} peers available`);
+    console.log(`Swarm update for ${modelId}: ${peers.length} peers available`);
     
     // Connect to new peers we're not connected to yet
     const peersToConnect = peers
@@ -210,7 +210,7 @@ export class P2PClient {
       .slice(0, 50 - (this.webRTCHandler?.getAllPeers().size || 0));
 
     if (peersToConnect.length > 0) {
-      console.log(`📞 Initiating connections to ${peersToConnect.length} new peers`);
+      console.log(`Initiating connections to ${peersToConnect.length} new peers`);
       for (const peer of peersToConnect) {
         await this.webRTCHandler?.createPeerConnection(peer.id, true);
       }
@@ -223,7 +223,7 @@ export class P2PClient {
         if (existingPeer?.dataChannel?.readyState === 'open') {
           // Peer has complete model but we might not have received metadata yet
           // The peer should send it when channel opens, but we can request it
-          console.log(`✅ Peer ${peer.id} has complete model ${modelId}`);
+          console.log(`Peer ${peer.id} has complete model ${modelId}`);
         }
       }
     });
@@ -231,20 +231,20 @@ export class P2PClient {
 
   private handleMetadata(peerId: string, message: any) {
     const modelPackage: ModelPackage = message.package;
-    console.log(`📦 Metadata received from ${peerId}: ${modelPackage.id}`);
+    console.log(`Metadata received from ${peerId}: ${modelPackage.id}`);
     
     if (!this.swarmManager?.getSwarms().has(modelPackage.id)) {
-      console.log(`🆕 New model discovered: ${modelPackage.id}, starting download`);
+      console.log(`New model discovered: ${modelPackage.id}, starting download`);
       this.downloadModel(modelPackage.id, modelPackage);
     } else {
-      console.log(`ℹ️ Already downloading/have model: ${modelPackage.id}`);
+      console.log(`Already downloading/have model: ${modelPackage.id}`);
     }
   }
 
   private sendAllMetadata(peerId: string) {
     const peer = this.webRTCHandler?.getPeer(peerId);
     if (!peer?.dataChannel || peer.dataChannel.readyState !== 'open') {
-      console.log(`⚠️ Cannot send metadata to ${peerId} - channel not ready (state: ${peer?.dataChannel?.readyState})`);
+      console.log(`Cannot send metadata to ${peerId} - channel not ready (state: ${peer?.dataChannel?.readyState})`);
       return;
     }
 
@@ -265,17 +265,17 @@ export class P2PClient {
           }));
           
           sentCount++;
-          console.log(`📤 Sent metadata for ${modelId} to ${peerId}`);
+          console.log(`Sent metadata for ${modelId} to ${peerId}`);
         } catch (error) {
-          console.error(`❌ Failed to send metadata to ${peerId}:`, error);
+          console.error(`Failed to send metadata to ${peerId}:`, error);
         }
       }
     });
 
     if (sentCount === 0) {
-      console.log(`ℹ️ No complete models to share with ${peerId}`);
+      console.log(`No complete models to share with ${peerId}`);
     } else {
-      console.log(`✅ Sent ${sentCount} model(s) metadata to ${peerId}`);
+      console.log(`Sent ${sentCount} model(s) metadata to ${peerId}`);
     }
   }
 
@@ -288,7 +288,7 @@ export class P2PClient {
     peer.bitfield.set(modelId, bitfieldArray);
     
     const hasPieces = Array.from(bitfieldArray).some(byte => byte !== 0);
-    console.log(`📊 Received bitfield from ${peerId} for ${modelId} (has pieces: ${hasPieces})`);
+    console.log(`Received bitfield from ${peerId} for ${modelId} (has pieces: ${hasPieces})`);
     
     if (this.swarmManager?.getSwarms().has(modelId)) {
       const actions = this.swarmManager?.requestChunksFromPeer(peerId, modelId, bitfieldArray);
@@ -312,7 +312,7 @@ export class P2PClient {
     }
     
     Utils.setBit(bitfield, chunkIndex);
-    console.log(`📣 Peer ${peerId} now has chunk ${chunkIndex} of ${modelId}`);
+    console.log(`Peer ${peerId} now has chunk ${chunkIndex} of ${modelId}`);
     
     const actions = this.swarmManager?.requestChunksFromPeer(peerId, modelId, bitfield);
     if (actions) {
@@ -346,7 +346,7 @@ export class P2PClient {
   private requestChunk(peerId: string, modelId: string, chunkIndex: number) {
     const peer = this.webRTCHandler?.getPeer(peerId);
     if (!peer?.dataChannel || peer.dataChannel.readyState !== 'open') {
-      console.log(`⚠️ Cannot request chunk from ${peerId} - channel not ready`);
+      console.log(`Cannot request chunk from ${peerId} - channel not ready`);
       return;
     }
 
@@ -356,7 +356,7 @@ export class P2PClient {
       chunkIndex
     }));
 
-    console.log(`📥 Requesting chunk ${chunkIndex} from ${peerId}`);
+    console.log(`Requesting chunk ${chunkIndex} from ${peerId}`);
   }
 
   private sendPiece(peerId: string, modelId: string, chunk: ModelChunk) {
@@ -370,7 +370,7 @@ export class P2PClient {
       data: Utils.arrayBufferToBase64(chunk.data),
       checksum: chunk.checksum
     }));
-    console.log(`📤 Sent chunk ${chunk.index} to ${peerId}`);
+    console.log(`Sent chunk ${chunk.index} to ${peerId}`);
   }
 
   private broadcastHave(modelId: string, chunkIndex: number) {
@@ -404,7 +404,7 @@ export class P2PClient {
     const swarm = this.swarmManager?.getSwarms().get(modelId);
     if (!swarm || !swarm.metadata) return;
     
-    console.log(`🎉 Download complete for ${modelId}!`);
+    console.log(`Download complete for ${modelId}!`);
     
     const sortedChunks = Array.from(swarm.receivedChunks.values()).sort((a, b) => a.index - b.index);
     const blobUrl = ModelSerializer.createBlobFromChunks(sortedChunks);
@@ -420,7 +420,7 @@ export class P2PClient {
       }
       URL.revokeObjectURL(blobUrl);
     } catch (error) {
-      console.error('❌ Failed to load model:', error);
+      console.error('Failed to load model:', error);
     }
     
     this.announceToTracker(modelId, true);
@@ -433,7 +433,7 @@ export class P2PClient {
     const swarm = this.swarmManager?.createSwarm(modelId, modelPackage, chunks);
     if (!swarm) return;
     
-    console.log(`📤 Sharing ${modelId} (${chunks.length} chunks)`);
+    console.log(`Sharing ${modelId} (${chunks.length} chunks)`);
     
     // Announce to tracker first
     this.announceToTracker(modelId, true);
@@ -447,33 +447,33 @@ export class P2PClient {
           const bitfield = Utils.createBitfield(swarm.ownChunks, swarm.totalChunks);
           peer.dataChannel.send(JSON.stringify({ type: 'bitfield', modelId, bitfield: Array.from(bitfield) }));
           sentTo++;
-          console.log(`📤 Shared model with peer ${peer.id}`);
+          console.log(`Shared model with peer ${peer.id}`);
         } catch (error) {
-          console.error(`❌ Failed to share with peer ${peer.id}:`, error);
+          console.error(`Failed to share with peer ${peer.id}:`, error);
         }
       }
     });
     
-    console.log(`✅ Shared model with ${sentTo} peer(s)`);
+    console.log(`Shared model with ${sentTo} peer(s)`);
   }
 
   async downloadModel(modelId: string, metadata: ModelPackage) {
     if (this.swarmManager?.getSwarms().has(modelId)) {
-      console.log(`ℹ️ Already downloading ${modelId}`);
+      console.log(`Already downloading ${modelId}`);
       return;
     }
     
     this.swarmManager?.createSwarm(modelId, metadata);
-    console.log(`📥 Starting download for ${modelId} (${metadata.metadata.totalChunks} chunks)`);
+    console.log(`Starting download for ${modelId} (${metadata.metadata.totalChunks} chunks)`);
     
     this.announceToTracker(modelId, false, []);
     
     const actions = this.swarmManager?.requestMoreChunks(modelId, this.getPeerBitfields());
     if (actions) {
-      console.log(`📊 Requesting ${actions.length} chunks to start download`);
+      console.log(`Requesting ${actions.length} chunks to start download`);
       this.executeActions(actions);
     } else {
-      console.log(`⚠️ No chunks available to request yet`);
+      console.log(`No chunks available to request yet`);
     }
   }
 
@@ -491,7 +491,7 @@ export class P2PClient {
     
     this.webRTCHandler?.disconnectAll();
     this.ws?.close();
-    console.log('👋 Disconnected from all peers and tracker');
+    console.log('Disconnected from all peers and tracker');
   }
 }
 

@@ -332,13 +332,13 @@ async function generateTrellisModel(imageUrl: string): Promise<string> {
 }
 
 async function generateModelFromPrompt(prompt: string): Promise<string> {
-  console.log("🖼️ Generating image with FLUX...");
+  console.log("Generating image with FLUX...");
   const imageUrl = await generateFluxImage(prompt);
-  console.log("✅ Image generated:", imageUrl);
+  console.log("Image generated:", imageUrl);
 
   console.log("🧩 Converting to 3D with Trellis...");
   const modelUrl = await generateTrellisModel(imageUrl);
-  console.log("✅ Model generated:", modelUrl);
+  console.log("Model generated:", modelUrl);
 
   return modelUrl;
 }
@@ -561,7 +561,7 @@ camera.keysRight.push(68); // D
         
         // Share with peers via P2P if requested
         if (shareWithPeers && (window as any).p2pClient) {
-          console.log('📤 Sharing model with peers...');
+          console.log('Sharing model with peers...');
           await (window as any).p2pClient.shareModel(
             modelUrl,
             new Vector3(pendingPlacement.x, rootMesh.position.y, pendingPlacement.z),
@@ -569,7 +569,7 @@ camera.keysRight.push(68); // D
             new Vector3(scale, scale, scale),
             prompt
           );
-          console.log('✅ Model shared with peers');
+          console.log('Model shared with peers');
         }
       }
     }
@@ -737,23 +737,23 @@ const p2pClient = new P2PClient(scene, 'wss://p2p-mesh-sharing.onrender.com');
 
 // Setup P2P callbacks
 p2pClient.setOnPeerConnected((peerId) => {
-  console.log(`🤝 Connected to peer: ${peerId}`);
+  console.log(`Connected to peer: ${peerId}`);
   updateHudWithP2PStatus();
 });
 
 p2pClient.setOnPeerDisconnected((peerId) => {
-  console.log(`👋 Peer disconnected: ${peerId}`);
+  console.log(`Peer disconnected: ${peerId}`);
   updateHudWithP2PStatus();
 });
 
 p2pClient.setOnModelReceived((modelPackage) => {
-  console.log(`📥 Received model from peer: ${modelPackage.id}`);
+  console.log(`Received model from peer: ${modelPackage.id}`);
   // Model is automatically loaded into scene by P2PClient
   updateHudWithP2PStatus();
 });
 
 p2pClient.setOnDownloadProgress((modelId, progress) => {
-  console.log(`📊 Download progress for ${modelId}: ${progress.toFixed(1)}%`);
+  console.log(`Download progress for ${modelId}: ${progress.toFixed(1)}%`);
 });
 
 // Update HUD periodically to show peer status
@@ -771,12 +771,3 @@ engine.runRenderLoop(() => {
 window.addEventListener("resize", () => {
   engine.resize();
 });
-
-import { runAllLocalTests } from "./chunking-test";
-
-// // Add keyboard shortcut
-// window.addEventListener("keydown", async (e) => {
-//   if (e.key === 't') {
-//     await testChunking("models/test_model_1.glb");
-//   }
-// });

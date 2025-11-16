@@ -238,7 +238,7 @@ function broadcastToSwarm(modelId, message, excludePeerId = null) {
   });
 
   if (sent > 0) {
-    console.log(`  📤 Broadcast to ${sent} peers in swarm ${modelId}`);
+    console.log(`Broadcast to ${sent} peers in swarm ${modelId}`);
   }
 }
 
@@ -265,7 +265,7 @@ setInterval(() => {
 
     if (swarm.size === 0) {
       swarms.delete(modelId);
-      console.log(`🧹 Removed empty swarm ${modelId}`);
+      console.log(`Removed empty swarm ${modelId}`);
     }
   });
 }, 60000); // Every minute
@@ -282,7 +282,7 @@ setInterval(() => {
     .slice(0, 5);
   
   if (topSwarms.length > 0) {
-    console.log('🔥 Top swarms:');
+    console.log('Top swarms:');
     topSwarms.forEach(([modelId, swarm]) => {
       const stats = getSwarmStats(modelId);
       console.log(`   ${modelId.substring(0, 12)}...: ${stats.seeders}S/${stats.leechers}L (${swarm.size} total)`);
@@ -294,4 +294,4 @@ setInterval(() => {
 /**
  * Graceful shutdown
  */
-console.log(`✨ Ready to track swarms!\n`);
+console.log(`Ready to track swarms!\n`);
