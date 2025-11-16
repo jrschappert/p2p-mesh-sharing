@@ -5,74 +5,26 @@ const getRTCConfig = (): RTCConfiguration => {
 
   if (import.meta.env.VITE_STUN_URL) {
     iceServers.push({ urls: import.meta.env.VITE_STUN_URL });
-    console.log('STUN server configured:', import.meta.env.VITE_STUN_URL);
-  } else {
-    console.warn('No STUN server configured!');
+    console.log('STUN configured:', import.meta.env.VITE_STUN_URL);
   }
 
   if (import.meta.env.VITE_TURN_URLS) {
     const turnUrls = import.meta.env.VITE_TURN_URLS.split(',');
-    for (const url of turnUrls) {
+    turnUrls.forEach((url: string) => {
       iceServers.push({
         urls: url.trim(),
         username: import.meta.env.VITE_TURN_USERNAME,
         credential: import.meta.env.VITE_TURN_CREDENTIAL,
       });
-    }
-    console.log('TURN servers configured:', turnUrls.length, 'server(s)');
-    console.log('URLs:', turnUrls.map((u: string) => u.trim()));
-    console.log('Username:', import.meta.env.VITE_TURN_USERNAME);
-    console.log('Credential:', import.meta.env.VITE_TURN_CREDENTIAL ? '***' : 'MISSING!');
-  } else {
-    console.error('NO TURN SERVERS CONFIGURED! Cross-network connections WILL FAIL!');
-    console.error('   Add VITE_TURN_URLS to your .env file');
+    });
+    console.log(`TURN configured: ${turnUrls.length} server(s)`);
   }
 
-  console.log('Final ICE servers config:', iceServers);
-  
-  // Test TURN connectivity
-  if (iceServers.length > 0) {
-    testTURNConnectivity(iceServers);
-  }
-  
-  return { 
+  return {
     iceServers,
-    iceCandidatePoolSize: 10, // Gather more candidates
-    iceTransportPolicy: 'all' // Try all connection types including relay
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: 'all'
   };
-};
-
-// Test if TURN servers are reachable
-async function testTURNConnectivity(iceServers: RTCIceServer[]) {
-  console.log('Testing TURN server connectivity...');
-  
-  const pc = new RTCPeerConnection({ iceServers });
-  const candidateTypes = new Set<string>();
-  
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      const type = event.candidate.type || 'unknown';
-      candidateTypes.add(type);
-      console.log(`Test candidate type: ${type}`);
-    } else {
-      const hasRelay = candidateTypes.has('relay');
-      console.log('TURN test result:', {
-        candidateTypes: Array.from(candidateTypes),
-        turnWorking: hasRelay ? 'YES - TURN is working!' : 'NO - TURN not reachable!'
-      });
-      
-      if (!hasRelay) {
-        console.error('TURN servers are configured but not generating relay candidates!');
-      }
-      
-      pc.close();
-    }
-  };
-  
-  // Create a dummy data channel to trigger ICE gathering
-  pc.createDataChannel('test');
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
 }
 
 const RTC_CONFIG = getRTCConfig();
@@ -235,14 +187,6 @@ export class WebRTCHandler {
       openTimestamp = Date.now();
       console.log(`Data channel OPEN with ${peerId}`);
       this.onDataChannelOpen(peerId);
-      
-      // Test send immediately
-      try {
-        channel.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-        console.log(`Sent test ping to ${peerId}`);
-      } catch (error) {
-        console.error(`Failed to send test ping to ${peerId}:`, error);
-      }
     };
 
     channel.onmessage = (event) => {
@@ -260,12 +204,6 @@ export class WebRTCHandler {
         if (typeof event.data === 'string') {
           const parsed = JSON.parse(event.data);
           messageInfo = `type: ${parsed.type}`;
-          
-          // Special handling for test ping
-          if (parsed.type === 'ping') {
-            console.log(`Received test ping from ${peerId}`);
-            return; // Don't process further
-          }
         } else {
           messageInfo = `[Binary: ${event.data.byteLength} bytes]`;
         }

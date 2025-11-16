@@ -150,14 +150,6 @@ document.body.appendChild(cursor);
 // Setup HUD text management
 const hudElement = document.getElementById('hud') as HTMLElement;
 
-function updateHudText(isLocked: boolean) {
-  if (isLocked) {
-    hudElement.innerHTML = 'Click to Place Model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
-  } else {
-    hudElement.innerHTML = 'Click to lock mouse • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
-  }
-}
-
 function updateHudWithP2PStatus() {
   const isLocked = document.pointerLockElement === canvas;
   const peerCount = (window as any).p2pClient?.getConnectedPeers().length || 0;
@@ -170,12 +162,8 @@ function updateHudWithP2PStatus() {
   }
 }
 
-// Initialize HUD with unlocked state
-updateHudText(false);
-
 // Listen for pointer lock changes
 document.addEventListener('pointerlockchange', () => {
-  const isLocked = document.pointerLockElement === canvas;
   updateHudWithP2PStatus();
 });
 
@@ -217,11 +205,6 @@ const FAL_KEY = (import.meta as any).env.VITE_FAL_KEY || "";
 fal.config({ credentials: FAL_KEY });
 
 // Progress tracking
-interface ProgressState {
-  percentage: number;
-  message: string;
-}
-
 let currentProgress = 0;
 
 function updateProgress(percentage: number, message: string) {
