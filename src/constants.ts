@@ -5,10 +5,7 @@
 export const P2P_CONFIG = {
   // Connection limits
   MAX_PEERS: 50,
-  
-  // Timing intervals (milliseconds)
-  SWARM_MAINTENANCE_INTERVAL: 15000,
-  REQUEST_TIMEOUT: 120000,
+  REQUEST_TIMEOUT: 30000, // 30 second timeout for chunk requests
   DISCONNECT_GRACE_PERIOD: 10000,
   ICE_RESTART_GRACE_PERIOD: 5000,
   PEER_STATUS_UPDATE_INTERVAL: 2000,

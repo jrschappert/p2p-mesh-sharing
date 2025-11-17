@@ -18,7 +18,6 @@ export class P2PClient {
   private webRTCHandler: WebRTCHandler | null = null;
   private swarmManager: SwarmManager | null = null;
   private scene: Scene;
-  private maintenanceInterval: NodeJS.Timeout | null = null;
   
   // Track which peers have received metadata for each model
   private metadataSentTo = new Map<string, Set<string>>(); // modelId -> Set<peerId>
@@ -40,25 +39,6 @@ export class P2PClient {
       this.disconnect();
     });
   }
-  
-  /**
-   * Start the swarm maintenance interval
-   */
-  private startSwarmMaintenance(): void {
-    if (this.maintenanceInterval) {
-      clearInterval(this.maintenanceInterval);
-    }
-    
-    this.maintenanceInterval = setInterval(() => {
-      if (this.swarmManager && this.webRTCHandler) {
-        const actions = this.swarmManager.maintainSwarms(
-          this.getPeerBitfields(),
-          this.getPeerLastActivity()
-        );
-        this.executeActions(actions);
-      }
-    }, P2P_CONFIG.SWARM_MAINTENANCE_INTERVAL);
-  }
 
   private connectToTracker(url: string): void {
     logger.info('Connecting to tracker...');
@@ -69,9 +49,6 @@ export class P2PClient {
       this.webRTCHandler = new WebRTCHandler(this.ws!);
       this.swarmManager = new SwarmManager();
       this.setupWebRTCHandlerCallbacks();
-      
-      // Start maintenance interval after connection is established
-      this.startSwarmMaintenance();
       
       // Delay connection request to ensure everything is ready
       setTimeout(() => {
@@ -94,11 +71,6 @@ export class P2PClient {
     this.ws.onerror = (error) => logger.error('Tracker error:', error);
     this.ws.onclose = () => {
       logger.warn('Disconnected from tracker, reconnecting...');
-      // Clear maintenance interval on disconnect
-      if (this.maintenanceInterval) {
-        clearInterval(this.maintenanceInterval);
-        this.maintenanceInterval = null;
-      }
       setTimeout(() => this.connectToTracker(url), P2P_CONFIG.RECONNECT_DELAY);
     };
   }
@@ -534,12 +506,6 @@ export class P2PClient {
   public getConnectedPeers = (): string[] => Array.from(this.webRTCHandler?.getAllPeers().keys() || []);
 
   public disconnect(): void {
-    // Clear maintenance interval
-    if (this.maintenanceInterval) {
-      clearInterval(this.maintenanceInterval);
-      this.maintenanceInterval = null;
-    }
-    
     // Clear metadata tracking
     this.metadataSentTo.clear();
     

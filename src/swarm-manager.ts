@@ -74,6 +74,9 @@ export class SwarmManager {
     const progress = swarm.ownChunks.size / swarm.totalChunks * 100;
     actions.push({ type: 'download_progress', modelId, progress });
 
+    // Check for timed out requests (event-driven timeout checking)
+    this.checkTimeouts(swarm);
+
     // Action: download complete or request more
     if (swarm.ownChunks.size === swarm.totalChunks) {
       actions.push({ type: 'download_complete', modelId });
@@ -82,6 +85,28 @@ export class SwarmManager {
     }
 
     return actions;
+  }
+
+  /**
+   * Check for timed out chunk requests and clear them
+   */
+  private checkTimeouts(swarm: Swarm): void {
+    const now = Date.now();
+    const timeoutsToRemove: number[] = [];
+    
+    swarm.requestedChunks.forEach((peerId, chunkIndex) => {
+      // Use swarm start time as a proxy for request time
+      // If a chunk has been requested for longer than REQUEST_TIMEOUT, clear it
+      if (swarm.startTime && now - swarm.startTime > this.REQUEST_TIMEOUT) {
+        timeoutsToRemove.push(chunkIndex);
+      }
+    });
+    
+    timeoutsToRemove.forEach(chunkIndex => {
+      const peerId = swarm.requestedChunks.get(chunkIndex);
+      logger.warn(`Request timeout for chunk ${chunkIndex} from ${peerId}`);
+      swarm.requestedChunks.delete(chunkIndex);
+    });
   }
 
   public requestMoreChunks(modelId: string, peerBitfields: Map<string, Map<string, Uint8Array>>): SwarmAction[] {
@@ -175,26 +200,4 @@ export class SwarmManager {
     return { type: 'send_piece', peerId, modelId, chunk };
   }
 
-  public maintainSwarms(peerBitfields: Map<string, Map<string, Uint8Array>>, peerLastActivity: Map<string, number>): SwarmAction[] {
-    const now = Date.now();
-    const actions: SwarmAction[] = [];
-
-    this.swarms.forEach((swarm, modelId) => {
-      // Check for timed out requests
-      swarm.requestedChunks.forEach((peerId, chunkIndex) => {
-        const lastActivity = peerLastActivity.get(peerId);
-        if (!lastActivity || now - lastActivity > this.REQUEST_TIMEOUT) {
-          logger.warn(`Request timeout for chunk ${chunkIndex} from ${peerId}`);
-          swarm.requestedChunks.delete(chunkIndex);
-        }
-      });
-
-      // Request more if needed
-      if (swarm.ownChunks.size < swarm.totalChunks) {
-        actions.push(...this.requestMoreChunks(modelId, peerBitfields));
-      }
-    });
-
-    return actions;
-  }
 }
