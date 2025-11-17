@@ -123,7 +123,7 @@ export class P2PClient {
     this.webRTCHandler.onDataChannelMessage = (peerId, data) => this.handlePeerMessage(peerId, data);
     
     this.webRTCHandler.onDataChannelOpen = (peerId) => {
-      logger.p2p(`📡 Data channel OPEN with ${peerId} - sending metadata`);
+      logger.p2p(`Data channel OPEN with ${peerId} - sending metadata`);
       // Send metadata once when channel opens
       this.sendAllMetadata(peerId);
     };
@@ -174,7 +174,7 @@ export class P2PClient {
         chunks
       }));
 
-      logger.p2p(`📢 Announced ${modelId} to tracker (complete: ${complete})`);
+      logger.p2p(`Announced ${modelId} to tracker (complete: ${complete})`);
     } catch (error) {
       logger.error('Failed to announce to tracker:', error);
     }
@@ -411,14 +411,6 @@ export class P2PClient {
       }
     });
     return bitfields;
-  }
-
-  private getPeerLastActivity(): Map<string, number> {
-    const lastActivity = new Map<string, number>();
-    this.webRTCHandler?.getAllPeers().forEach((peer, peerId) => {
-      lastActivity.set(peerId, peer.lastActivity);
-    });
-    return lastActivity;
   }
 
   private async handleDownloadComplete(modelId: string): Promise<void> {

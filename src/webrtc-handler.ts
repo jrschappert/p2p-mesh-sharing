@@ -82,7 +82,6 @@ export class WebRTCHandler {
       lastActivity: Date.now()
     };
 
-    // Track candidate types for this peer
     const candidateTypes = new Set<string>();
 
     // ICE candidate handler
@@ -121,7 +120,7 @@ export class WebRTCHandler {
 
     // ICE connection state monitoring with restart capability
     pc.oniceconnectionstatechange = async () => {
-      logger.debug(`🧊 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
+      logger.debug(`ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
       
       if (pc.iceConnectionState === 'disconnected') {
         logger.warn(`ICE connection disconnected for ${peerId}, will attempt restart if it fails`);
