@@ -259,23 +259,6 @@ export class WebRTCHandler {
         peer.lastActivity = Date.now();
       }
       
-      // Log message receipt with timing (debug only)
-      if (import.meta.env.DEV) {
-        const timeSinceOpen = openTimestamp ? Date.now() - openTimestamp : 'N/A';
-        let messageInfo = '';
-        try {
-          if (typeof event.data === 'string') {
-            const parsed = JSON.parse(event.data);
-            messageInfo = `type: ${parsed.type}`;
-          } else {
-            messageInfo = `[Binary: ${event.data.byteLength} bytes]`;
-          }
-        } catch (e) {
-          messageInfo = '[Parse error]';
-        }
-        logger.debug(`Message from ${peerId} (${timeSinceOpen}ms since open): ${messageInfo}`);
-      }
-      
       this.onDataChannelMessage(peerId, event.data);
     };
 
