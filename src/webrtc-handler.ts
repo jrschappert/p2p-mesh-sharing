@@ -23,7 +23,9 @@ const getRTCConfig = (): RTCConfiguration => {
   return {
     iceServers,
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: 'all'
+    iceTransportPolicy: 'all',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require'
   };
 }
 
@@ -110,11 +112,32 @@ export class WebRTCHandler {
       }
     };
 
-    // ICE connection state monitoring
-    pc.oniceconnectionstatechange = () => {
+    // ICE connection state monitoring with restart capability
+    pc.oniceconnectionstatechange = async () => {
       console.log(`🧊 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
-      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-        console.warn(`ICE connection ${pc.iceConnectionState} for ${peerId}`);
+      
+      if (pc.iceConnectionState === 'disconnected') {
+        console.warn(`ICE connection disconnected for ${peerId}, will attempt restart if it fails`);
+      } else if (pc.iceConnectionState === 'failed') {
+        console.warn(`ICE connection failed for ${peerId}, attempting ICE restart...`);
+        
+        // Attempt ICE restart instead of immediately disconnecting
+        try {
+          if (peer.isInitiator && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            
+            this.ws.send(JSON.stringify({
+              type: 'offer',
+              to: peerId,
+              offer: pc.localDescription
+            }));
+            
+            console.log(`Sent ICE restart offer to ${peerId}`);
+          }
+        } catch (error) {
+          console.error(`ICE restart failed for ${peerId}:`, error);
+        }
       }
     };
 
@@ -123,19 +146,54 @@ export class WebRTCHandler {
       console.log(`ICE gathering state for ${peerId}: ${pc.iceGatheringState}`);
     };
 
-    // Connection state handler
+    // Connection state handler with timeout before cleanup
+    let disconnectTimeout: NodeJS.Timeout | null = null;
+    
     pc.onconnectionstatechange = () => {
       console.log(`Connection state for ${peerId}: ${pc.connectionState}`);
+      
       if (pc.connectionState === 'connected') {
         console.log(`Peer connection established with ${peerId}`);
+        // Clear any pending disconnect timeout
+        if (disconnectTimeout) {
+          clearTimeout(disconnectTimeout);
+          disconnectTimeout = null;
+        }
         this.onPeerConnected(peerId);
       } else if (pc.connectionState === 'disconnected') {
-        console.log(`Peer ${peerId} disconnected (might reconnect)`);
+        console.log(`Peer ${peerId} disconnected (waiting 10s before cleanup)`);
+        
+        // Wait 10 seconds before cleaning up - might reconnect
+        if (!disconnectTimeout) {
+          disconnectTimeout = setTimeout(() => {
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+              console.log(`Peer ${peerId} still disconnected after 10s, cleaning up`);
+              this.handlePeerDisconnect(peerId);
+            }
+          }, 10000);
+        }
       } else if (pc.connectionState === 'failed') {
         console.error(`Peer ${peerId} connection failed`);
-        this.handlePeerDisconnect(peerId);
+        
+        // Clear disconnect timeout and cleanup immediately on failure
+        if (disconnectTimeout) {
+          clearTimeout(disconnectTimeout);
+          disconnectTimeout = null;
+        }
+        
+        // Give ICE restart a chance (5 second grace period)
+        setTimeout(() => {
+          if (pc.connectionState === 'failed') {
+            console.log(`Peer ${peerId} still failed after ICE restart attempt, cleaning up`);
+            this.handlePeerDisconnect(peerId);
+          }
+        }, 5000);
       } else if (pc.connectionState === 'closed') {
         console.log(`Peer ${peerId} connection closed`);
+        if (disconnectTimeout) {
+          clearTimeout(disconnectTimeout);
+          disconnectTimeout = null;
+        }
         this.handlePeerDisconnect(peerId);
       }
     };

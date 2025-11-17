@@ -122,13 +122,14 @@ export class SwarmManager {
 
       if (peerRequests >= this.CHUNKS_PER_REQUEST) return;
 
+      let requestedThisRound = 0;
       for (const chunkIdx of needed) {
-        if (peerRequests >= this.CHUNKS_PER_REQUEST) break;
+        if (peerRequests + requestedThisRound >= this.CHUNKS_PER_REQUEST) break;
         
         if (Utils.hasBit(bitfield, chunkIdx) && !swarm.requestedChunks.has(chunkIdx)) {
           actions.push({ type: 'request_chunk', peerId, modelId, chunkIndex: chunkIdx });
           swarm.requestedChunks.set(chunkIdx, peerId);
-          break;
+          requestedThisRound++;
         }
       }
     });

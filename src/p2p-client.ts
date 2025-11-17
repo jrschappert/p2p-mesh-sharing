@@ -16,8 +16,8 @@ export class P2PClient {
   private swarmManager: SwarmManager | null = null;
   private scene: Scene;
   
-  // Track pending metadata sends for retry
-  private pendingMetadataSends = new Map<string, NodeJS.Timeout>();
+  // Track which peers have received metadata for each model
+  private metadataSentTo = new Map<string, Set<string>>(); // modelId -> Set<peerId>
   
   // Callbacks
   private onPeerConnected?: (peerId: string) => void;
@@ -28,6 +28,7 @@ export class P2PClient {
   constructor(scene: Scene) {
     this.scene = scene;
     const url = import.meta.env.VITE_WEBSOCKET_URL || 'wss://p2p-mesh-sharing.onrender.com';
+    console.log("url", url);
     this.connectToTracker(url);
     
     setInterval(() => {
@@ -117,12 +118,8 @@ export class P2PClient {
     
     this.webRTCHandler.onPeerDisconnected = (peerId) => {
       console.log(`Peer disconnected: ${peerId}`);
-      // Clear any pending metadata sends for this peer
-      const timeout = this.pendingMetadataSends.get(peerId);
-      if (timeout) {
-        clearTimeout(timeout);
-        this.pendingMetadataSends.delete(peerId);
-      }
+      // Clear metadata tracking for this peer
+      this.metadataSentTo.forEach(peerSet => peerSet.delete(peerId));
       this.onPeerDisconnected?.(peerId);
     };
     
@@ -130,43 +127,9 @@ export class P2PClient {
     
     this.webRTCHandler.onDataChannelOpen = (peerId) => {
       console.log(`📡 Data channel OPEN with ${peerId} - sending metadata`);
-      // Send metadata immediately when channel opens
+      // Send metadata once when channel opens
       this.sendAllMetadata(peerId);
-      
-      // Also retry after a short delay in case of any issues
-      this.scheduleMetadataRetry(peerId);
     };
-  }
-
-  private scheduleMetadataRetry(peerId: string, attemptNumber: number = 1) {
-    // Clear any existing timeout
-    const existingTimeout = this.pendingMetadataSends.get(peerId);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-    }
-
-    // Max 3 retry attempts
-    if (attemptNumber > 3) {
-      console.log(`Gave up retrying metadata send to ${peerId} after 3 attempts`);
-      this.pendingMetadataSends.delete(peerId);
-      return;
-    }
-
-    // Schedule retry with exponential backoff
-    const delay = 1000 * attemptNumber;
-    const timeout = setTimeout(() => {
-      const peer = this.webRTCHandler?.getPeer(peerId);
-      if (peer?.dataChannel?.readyState === 'open') {
-        console.log(`Retry #${attemptNumber}: Sending metadata to ${peerId}`);
-        this.sendAllMetadata(peerId);
-        this.scheduleMetadataRetry(peerId, attemptNumber + 1);
-      } else {
-        console.log(`Skipping retry for ${peerId} - channel not open`);
-        this.pendingMetadataSends.delete(peerId);
-      }
-    }, delay);
-
-    this.pendingMetadataSends.set(peerId, timeout);
   }
 
   private handlePeerMessage(peerId: string, data: any) {
@@ -261,19 +224,33 @@ export class P2PClient {
     let sentCount = 0;
     this.swarmManager?.getSwarms().forEach((swarm, modelId) => {
       if (swarm.metadata && swarm.ownChunks.size === swarm.totalChunks) {
+        // Check if we've already sent this metadata to this peer
+        let peerSet = this.metadataSentTo.get(modelId);
+        if (!peerSet) {
+          peerSet = new Set();
+          this.metadataSentTo.set(modelId, peerSet);
+        }
+        
+        if (peerSet.has(peerId)) {
+          console.log(`Already sent metadata for ${modelId} to ${peerId}, skipping`);
+          return;
+        }
+        
         try {
-          peer.dataChannel!.send(JSON.stringify({ 
-            type: 'metadata', 
-            package: swarm.metadata 
+          peer.dataChannel!.send(JSON.stringify({
+            type: 'metadata',
+            package: swarm.metadata
           }));
           
           const bitfield = Utils.createBitfield(swarm.ownChunks, swarm.totalChunks);
-          peer.dataChannel!.send(JSON.stringify({ 
-            type: 'bitfield', 
-            modelId, 
-            bitfield: Array.from(bitfield) 
+          peer.dataChannel!.send(JSON.stringify({
+            type: 'bitfield',
+            modelId,
+            bitfield: Array.from(bitfield)
           }));
           
+          // Mark as sent to this peer
+          peerSet.add(peerId);
           sentCount++;
           console.log(`Sent metadata for ${modelId} to ${peerId}`);
         } catch (error) {
@@ -283,7 +260,7 @@ export class P2PClient {
     });
 
     if (sentCount === 0) {
-      console.log(`No complete models to share with ${peerId}`);
+      console.log(`No new models to share with ${peerId}`);
     } else {
       console.log(`Sent ${sentCount} model(s) metadata to ${peerId}`);
     }
@@ -495,9 +472,8 @@ export class P2PClient {
   public getConnectedPeers = (): string[] => Array.from(this.webRTCHandler?.getAllPeers().keys() || []);
 
   public disconnect() {
-    // Clear all pending metadata sends
-    this.pendingMetadataSends.forEach(timeout => clearTimeout(timeout));
-    this.pendingMetadataSends.clear();
+    // Clear metadata tracking
+    this.metadataSentTo.clear();
     
     this.webRTCHandler?.disconnectAll();
     this.ws?.close();
