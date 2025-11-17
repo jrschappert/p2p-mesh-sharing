@@ -135,7 +135,8 @@ function handleAnnounce(ws, clientInfo, message) {
     type: 'peer-joined-swarm',
     modelId,
     peerId: clientInfo.id,
-    complete: complete || false
+    complete: complete || false,
+    peers: stats.peers
   }, clientInfo.id);
 }
 

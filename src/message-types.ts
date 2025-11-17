@@ -32,7 +32,7 @@ export interface PeerJoinedSwarmMessage {
   modelId: string;
   peerId: string;
   complete: boolean;
-  peers: PeerInfo[]; // Include peers list for consistency
+  peers: PeerInfo[]; // Same structure as announce-response for consistent handling
 }
 
 export interface PeerLeftSwarmMessage {
