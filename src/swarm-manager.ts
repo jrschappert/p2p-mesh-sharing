@@ -1,6 +1,8 @@
 import { ModelPackage, ModelChunk, ModelSerializer } from './model-serializer';
 import { Swarm } from './types';
 import * as Utils from './utils';
+import { P2P_CONFIG } from './constants';
+import { logger } from './logger';
 
 // Action types that SwarmManager returns for P2PClient to execute
 export interface SwarmAction {
@@ -14,8 +16,8 @@ export interface SwarmAction {
 
 export class SwarmManager {
   private swarms = new Map<string, Swarm>();
-  private readonly CHUNKS_PER_REQUEST = 5;
-  private readonly REQUEST_TIMEOUT = 120000;
+  private readonly CHUNKS_PER_REQUEST = P2P_CONFIG.CHUNKS_PER_REQUEST;
+  private readonly REQUEST_TIMEOUT = P2P_CONFIG.REQUEST_TIMEOUT;
 
   constructor() {}
 
@@ -54,7 +56,7 @@ export class SwarmManager {
     };
 
     if (!ModelSerializer.verifyChunk(chunk)) {
-      console.error(`Chunk ${chunkIndex} failed verification`);
+      logger.error(`Chunk ${chunkIndex} failed verification`);
       swarm.requestedChunks.delete(chunkIndex);
       return actions;
     }
@@ -63,7 +65,7 @@ export class SwarmManager {
     swarm.ownChunks.add(chunkIndex);
     swarm.requestedChunks.delete(chunkIndex);
 
-    console.log(`Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
+    logger.swarm(`Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
 
     // Action: broadcast have
     actions.push({ type: 'broadcast_have', modelId, chunkIndex });
@@ -160,13 +162,13 @@ export class SwarmManager {
     
     const swarm = this.swarms.get(modelId);
     if (!swarm || !swarm.ownChunks.has(chunkIndex)) {
-      console.warn(`We don't have chunk ${chunkIndex}`);
+      logger.warn(`We don't have chunk ${chunkIndex}`);
       return null;
     }
 
     const chunk = swarm.receivedChunks.get(chunkIndex);
     if (!chunk) {
-      console.warn(`Chunk ${chunkIndex} not found in storage`);
+      logger.warn(`Chunk ${chunkIndex} not found in storage`);
       return null;
     }
 
@@ -182,7 +184,7 @@ export class SwarmManager {
       swarm.requestedChunks.forEach((peerId, chunkIndex) => {
         const lastActivity = peerLastActivity.get(peerId);
         if (!lastActivity || now - lastActivity > this.REQUEST_TIMEOUT) {
-          console.warn(`Request timeout for chunk ${chunkIndex} from ${peerId}`);
+          logger.warn(`Request timeout for chunk ${chunkIndex} from ${peerId}`);
           swarm.requestedChunks.delete(chunkIndex);
         }
       });

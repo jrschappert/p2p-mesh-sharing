@@ -1,11 +1,13 @@
 import { Peer } from './types';
+import { P2P_CONFIG } from './constants';
+import { logger } from './logger';
 
 const getRTCConfig = (): RTCConfiguration => {
   const iceServers: RTCIceServer[] = [];
 
   if (import.meta.env.VITE_STUN_URL) {
     iceServers.push({ urls: import.meta.env.VITE_STUN_URL });
-    console.log('STUN configured:', import.meta.env.VITE_STUN_URL);
+    logger.info('STUN configured:', import.meta.env.VITE_STUN_URL);
   }
 
   if (import.meta.env.VITE_TURN_URLS) {
@@ -17,12 +19,12 @@ const getRTCConfig = (): RTCConfiguration => {
         credential: import.meta.env.VITE_TURN_CREDENTIAL,
       });
     });
-    console.log(`TURN configured: ${turnUrls.length} server(s)`);
+    logger.info(`TURN configured: ${turnUrls.length} server(s)`);
   }
 
   return {
     iceServers,
-    iceCandidatePoolSize: 10,
+    iceCandidatePoolSize: P2P_CONFIG.ICE_CANDIDATE_POOL_SIZE,
     iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require'
@@ -35,7 +37,8 @@ export class WebRTCHandler {
   private peers = new Map<string, Peer>();
   private ws: WebSocket;
   private rtcConfig: RTCConfiguration;
-  private readonly MAX_PEERS = 50;
+  private readonly MAX_PEERS = P2P_CONFIG.MAX_PEERS;
+  private disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 
   // Callbacks to communicate with P2PClient
   public onPeerConnected: (peerId: string) => void = () => {};
@@ -58,16 +61,16 @@ export class WebRTCHandler {
 
   public async createPeerConnection(peerId: string, isInitiator: boolean): Promise<Peer | null> {
     if (this.peers.has(peerId)) {
-      console.log(`Peer ${peerId} already exists, reusing connection`);
+      logger.debug(`Peer ${peerId} already exists, reusing connection`);
       return this.peers.get(peerId)!;
     }
 
     if (this.peers.size >= this.MAX_PEERS) {
-      console.warn(`Max peers reached (${this.MAX_PEERS}), not connecting to ${peerId}`);
+      logger.warn(`Max peers reached (${this.MAX_PEERS}), not connecting to ${peerId}`);
       return null;
     }
 
-    console.log(`Creating connection with ${peerId} (initiator: ${isInitiator})`);
+    logger.webrtc(`Creating connection with ${peerId} (initiator: ${isInitiator})`);
 
     const pc = new RTCPeerConnection(this.rtcConfig);
     const peer: Peer = {
@@ -92,20 +95,24 @@ export class WebRTCHandler {
           candidateTypes.add(candidateType);
         }
         
-        console.log(`🧊 ICE candidate for ${peerId}:`, {
+        logger.debug(`🧊 ICE candidate for ${peerId}:`, {
           type: candidateType,
           protocol: candidateStr.includes('udp') ? 'UDP' : candidateStr.includes('tcp') ? 'TCP' : 'unknown',
           relay: candidateType === 'relay' ? 'TURN' : 'Direct'
         });
         
-        this.ws.send(JSON.stringify({
-          type: 'ice-candidate',
-          to: peerId,
-          candidate: event.candidate
-        }));
+        try {
+          this.ws.send(JSON.stringify({
+            type: 'ice-candidate',
+            to: peerId,
+            candidate: event.candidate
+          }));
+        } catch (error) {
+          logger.error(`Failed to send ICE candidate to ${peerId}:`, error);
+        }
       } else if (!event.candidate) {
         const hasRelay = candidateTypes.has('relay');
-        console.log(`ICE gathering complete for ${peerId}:`, {
+        logger.debug(`ICE gathering complete for ${peerId}:`, {
           candidateTypes: Array.from(candidateTypes),
           usingTURN: hasRelay ? 'YES' : 'NO - Will fail across networks!'
         });
@@ -114,12 +121,12 @@ export class WebRTCHandler {
 
     // ICE connection state monitoring with restart capability
     pc.oniceconnectionstatechange = async () => {
-      console.log(`🧊 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
+      logger.debug(`🧊 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
       
       if (pc.iceConnectionState === 'disconnected') {
-        console.warn(`ICE connection disconnected for ${peerId}, will attempt restart if it fails`);
+        logger.warn(`ICE connection disconnected for ${peerId}, will attempt restart if it fails`);
       } else if (pc.iceConnectionState === 'failed') {
-        console.warn(`ICE connection failed for ${peerId}, attempting ICE restart...`);
+        logger.warn(`ICE connection failed for ${peerId}, attempting ICE restart...`);
         
         // Attempt ICE restart instead of immediately disconnecting
         try {
@@ -133,74 +140,67 @@ export class WebRTCHandler {
               offer: pc.localDescription
             }));
             
-            console.log(`Sent ICE restart offer to ${peerId}`);
+            logger.info(`Sent ICE restart offer to ${peerId}`);
           }
         } catch (error) {
-          console.error(`ICE restart failed for ${peerId}:`, error);
+          logger.error(`ICE restart failed for ${peerId}:`, error);
         }
       }
     };
 
     // ICE gathering state monitoring
     pc.onicegatheringstatechange = () => {
-      console.log(`ICE gathering state for ${peerId}: ${pc.iceGatheringState}`);
+      logger.debug(`ICE gathering state for ${peerId}: ${pc.iceGatheringState}`);
     };
 
-    // Connection state handler with timeout before cleanup
-    let disconnectTimeout: NodeJS.Timeout | null = null;
-    
+    // Connection state handler with centralized timeout management
     pc.onconnectionstatechange = () => {
-      console.log(`Connection state for ${peerId}: ${pc.connectionState}`);
+      logger.debug(`Connection state for ${peerId}: ${pc.connectionState}`);
+      
+      // Clear any existing timeout for this peer
+      const existingTimeout = this.disconnectTimeouts.get(peerId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        this.disconnectTimeouts.delete(peerId);
+      }
       
       if (pc.connectionState === 'connected') {
-        console.log(`Peer connection established with ${peerId}`);
-        // Clear any pending disconnect timeout
-        if (disconnectTimeout) {
-          clearTimeout(disconnectTimeout);
-          disconnectTimeout = null;
-        }
+        logger.webrtc(`Peer connection established with ${peerId}`);
         this.onPeerConnected(peerId);
       } else if (pc.connectionState === 'disconnected') {
-        console.log(`Peer ${peerId} disconnected (waiting 10s before cleanup)`);
+        logger.debug(`Peer ${peerId} disconnected (waiting ${P2P_CONFIG.DISCONNECT_GRACE_PERIOD}ms before cleanup)`);
         
-        // Wait 10 seconds before cleaning up - might reconnect
-        if (!disconnectTimeout) {
-          disconnectTimeout = setTimeout(() => {
-            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-              console.log(`Peer ${peerId} still disconnected after 10s, cleaning up`);
-              this.handlePeerDisconnect(peerId);
-            }
-          }, 10000);
-        }
-      } else if (pc.connectionState === 'failed') {
-        console.error(`Peer ${peerId} connection failed`);
-        
-        // Clear disconnect timeout and cleanup immediately on failure
-        if (disconnectTimeout) {
-          clearTimeout(disconnectTimeout);
-          disconnectTimeout = null;
-        }
-        
-        // Give ICE restart a chance (5 second grace period)
-        setTimeout(() => {
-          if (pc.connectionState === 'failed') {
-            console.log(`Peer ${peerId} still failed after ICE restart attempt, cleaning up`);
+        const timeout = setTimeout(() => {
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            logger.info(`Peer ${peerId} still disconnected, cleaning up`);
             this.handlePeerDisconnect(peerId);
           }
-        }, 5000);
+          this.disconnectTimeouts.delete(peerId);
+        }, P2P_CONFIG.DISCONNECT_GRACE_PERIOD);
+        
+        this.disconnectTimeouts.set(peerId, timeout);
+      } else if (pc.connectionState === 'failed') {
+        logger.error(`Peer ${peerId} connection failed`);
+        
+        // Give ICE restart a chance
+        const timeout = setTimeout(() => {
+          if (pc.connectionState === 'failed') {
+            logger.info(`Peer ${peerId} still failed after ICE restart attempt, cleaning up`);
+            this.handlePeerDisconnect(peerId);
+          }
+          this.disconnectTimeouts.delete(peerId);
+        }, P2P_CONFIG.ICE_RESTART_GRACE_PERIOD);
+        
+        this.disconnectTimeouts.set(peerId, timeout);
       } else if (pc.connectionState === 'closed') {
-        console.log(`Peer ${peerId} connection closed`);
-        if (disconnectTimeout) {
-          clearTimeout(disconnectTimeout);
-          disconnectTimeout = null;
-        }
+        logger.debug(`Peer ${peerId} connection closed`);
         this.handlePeerDisconnect(peerId);
       }
     };
 
     if (isInitiator) {
       // Initiator creates the data channel
-      console.log(`Creating data channel for ${peerId} (initiator)`);
+      logger.debug(`Creating data channel for ${peerId} (initiator)`);
       const dataChannel = pc.createDataChannel('bittorrent', {
         ordered: true,
         maxRetransmits: 3
@@ -209,22 +209,28 @@ export class WebRTCHandler {
       peer.dataChannel = dataChannel;
 
       // Create and send offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      
-      console.log(`Sending offer to ${peerId}`);
-      if (this.ws) {
-        this.ws.send(JSON.stringify({
-          type: 'offer',
-          to: peerId,
-          offer: pc.localDescription
-        }));
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        logger.debug(`Sending offer to ${peerId}`);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'offer',
+            to: peerId,
+            offer: pc.localDescription
+          }));
+        }
+      } catch (error) {
+        logger.error(`Failed to create/send offer to ${peerId}:`, error);
+        this.handlePeerDisconnect(peerId);
+        return null;
       }
     } else {
       // Answerer receives data channel via ondatachannel event
-      console.log(`Waiting for data channel from ${peerId} (answerer)`);
+      logger.debug(`Waiting for data channel from ${peerId} (answerer)`);
       pc.ondatachannel = (event) => {
-        console.log(`Received data channel from ${peerId}`);
+        logger.debug(`Received data channel from ${peerId}`);
         this.setupDataChannel(peerId, event.channel);
         peer.dataChannel = event.channel;
       };
@@ -234,8 +240,8 @@ export class WebRTCHandler {
     return peer;
   }
 
-  private setupDataChannel(peerId: string, channel: RTCDataChannel) {
-    console.log(`Setting up data channel for ${peerId} (current state: ${channel.readyState})`);
+  private setupDataChannel(peerId: string, channel: RTCDataChannel): void {
+    logger.debug(`Setting up data channel for ${peerId} (current state: ${channel.readyState})`);
     channel.binaryType = 'arraybuffer';
 
     // Track state changes
@@ -243,7 +249,7 @@ export class WebRTCHandler {
 
     channel.onopen = () => {
       openTimestamp = Date.now();
-      console.log(`Data channel OPEN with ${peerId}`);
+      logger.webrtc(`Data channel OPEN with ${peerId}`);
       this.onDataChannelOpen(peerId);
     };
 
@@ -253,103 +259,124 @@ export class WebRTCHandler {
         peer.lastActivity = Date.now();
       }
       
-      // Log message receipt with timing
-      const timeSinceOpen = openTimestamp ? Date.now() - openTimestamp : 'N/A';
-      
-      // Parse and log message type
-      let messageInfo = '';
-      try {
-        if (typeof event.data === 'string') {
-          const parsed = JSON.parse(event.data);
-          messageInfo = `type: ${parsed.type}`;
-        } else {
-          messageInfo = `[Binary: ${event.data.byteLength} bytes]`;
+      // Log message receipt with timing (debug only)
+      if (import.meta.env.DEV) {
+        const timeSinceOpen = openTimestamp ? Date.now() - openTimestamp : 'N/A';
+        let messageInfo = '';
+        try {
+          if (typeof event.data === 'string') {
+            const parsed = JSON.parse(event.data);
+            messageInfo = `type: ${parsed.type}`;
+          } else {
+            messageInfo = `[Binary: ${event.data.byteLength} bytes]`;
+          }
+        } catch (e) {
+          messageInfo = '[Parse error]';
         }
-      } catch (e) {
-        messageInfo = '[Parse error]';
+        logger.debug(`Message from ${peerId} (${timeSinceOpen}ms since open): ${messageInfo}`);
       }
-      
-      console.log(`Message from ${peerId} (${timeSinceOpen}ms since open): ${messageInfo}`);
       
       this.onDataChannelMessage(peerId, event.data);
     };
 
     channel.onerror = (error) => {
-      console.error(`Data channel ERROR with ${peerId}:`, error);
+      logger.error(`Data channel ERROR with ${peerId}:`, error);
     };
 
     channel.onclose = () => {
-      console.log(`Data channel CLOSED with ${peerId}`);
+      logger.debug(`Data channel CLOSED with ${peerId}`);
     };
 
     // If channel is already open, trigger the callback immediately
     if (channel.readyState === 'open') {
-      console.log(`Data channel already open with ${peerId}, triggering callback immediately`);
+      logger.debug(`Data channel already open with ${peerId}, triggering callback immediately`);
       openTimestamp = Date.now();
       this.onDataChannelOpen(peerId);
     }
   }
 
-  public async handleOffer(peerId: string, offer: RTCSessionDescriptionInit) {
-    console.log(`Received offer from ${peerId}`);
-    const peer = await this.createPeerConnection(peerId, false);
-    if (!peer) return;
-    
-    await peer.connection.setRemoteDescription(offer);
-    console.log(`Set remote description (offer) from ${peerId}`);
+  public async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<void> {
+    logger.debug(`Received offer from ${peerId}`);
+    try {
+      const peer = await this.createPeerConnection(peerId, false);
+      if (!peer) return;
+      
+      await peer.connection.setRemoteDescription(offer);
+      logger.debug(`Set remote description (offer) from ${peerId}`);
 
-    const answer = await peer.connection.createAnswer();
-    await peer.connection.setLocalDescription(answer);
-    console.log(`Created and set local description (answer) for ${peerId}`);
+      const answer = await peer.connection.createAnswer();
+      await peer.connection.setLocalDescription(answer);
+      logger.debug(`Created and set local description (answer) for ${peerId}`);
 
-    if (this.ws) {
-      console.log(`Sending answer to ${peerId}`);
-      this.ws.send(JSON.stringify({
-        type: 'answer',
-        to: peerId,
-        answer: peer.connection.localDescription
-      }));
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        logger.debug(`Sending answer to ${peerId}`);
+        this.ws.send(JSON.stringify({
+          type: 'answer',
+          to: peerId,
+          answer: peer.connection.localDescription
+        }));
+      }
+    } catch (error) {
+      logger.error(`Failed to handle offer from ${peerId}:`, error);
+      this.handlePeerDisconnect(peerId);
     }
   }
 
-  public async handleAnswer(peerId: string, answer: RTCSessionDescriptionInit) {
-    console.log(`Received answer from ${peerId}`);
+  public async handleAnswer(peerId: string, answer: RTCSessionDescriptionInit): Promise<void> {
+    logger.debug(`Received answer from ${peerId}`);
     const peer = this.peers.get(peerId);
     if (peer) {
-      await peer.connection.setRemoteDescription(answer);
-      console.log(`Set remote description (answer) from ${peerId}`);
+      try {
+        await peer.connection.setRemoteDescription(answer);
+        logger.debug(`Set remote description (answer) from ${peerId}`);
+      } catch (error) {
+        logger.error(`Failed to set remote description from ${peerId}:`, error);
+        this.handlePeerDisconnect(peerId);
+      }
     } else {
-      console.warn(`Received answer from unknown peer ${peerId}`);
+      logger.warn(`Received answer from unknown peer ${peerId}`);
     }
   }
 
-  public async handleIceCandidate(peerId: string, candidate: RTCIceCandidateInit) {
+  public async handleIceCandidate(peerId: string, candidate: RTCIceCandidateInit): Promise<void> {
     const peer = this.peers.get(peerId);
     if (peer) {
       try {
         await peer.connection.addIceCandidate(candidate);
-        console.log(`Added ICE candidate from ${peerId} (type: ${candidate.candidate?.split(' ')[7]})`);
+        logger.debug(`Added ICE candidate from ${peerId} (type: ${candidate.candidate?.split(' ')[7]})`);
       } catch (error) {
-        console.error(`Failed to add ICE candidate from ${peerId}:`, error);
+        logger.error(`Failed to add ICE candidate from ${peerId}:`, error);
       }
     } else {
-      console.warn(`Received ICE candidate from unknown peer ${peerId}`);
+      logger.warn(`Received ICE candidate from unknown peer ${peerId}`);
     }
   }
 
-  public handlePeerDisconnect(peerId: string) {
+  public handlePeerDisconnect(peerId: string): void {
+    // Clear any pending timeout
+    const timeout = this.disconnectTimeouts.get(peerId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.disconnectTimeouts.delete(peerId);
+    }
+    
     const peer = this.peers.get(peerId);
     if (peer) {
       peer.dataChannel?.close();
       peer.connection.close();
       this.peers.delete(peerId);
       this.onPeerDisconnected(peerId);
-      console.log(`Peer ${peerId} disconnected and cleaned up`);
+      logger.info(`Peer ${peerId} disconnected and cleaned up`);
     }
   }
 
-  public disconnectAll() {
-    console.log(`Disconnecting all ${this.peers.size} peers`);
+  public disconnectAll(): void {
+    logger.info(`Disconnecting all ${this.peers.size} peers`);
+    
+    // Clear all timeouts
+    this.disconnectTimeouts.forEach(timeout => clearTimeout(timeout));
+    this.disconnectTimeouts.clear();
+    
     this.peers.forEach(peer => {
       peer.dataChannel?.close();
       peer.connection.close();
