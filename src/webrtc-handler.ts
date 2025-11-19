@@ -94,7 +94,7 @@ export class WebRTCHandler {
           candidateTypes.add(candidateType);
         }
         
-        logger.debug(`🧊 ICE candidate for ${peerId}:`, {
+        logger.debug(`ICE candidate for ${peerId}:`, {
           type: candidateType,
           protocol: candidateStr.includes('udp') ? 'UDP' : candidateStr.includes('tcp') ? 'TCP' : 'unknown',
           relay: candidateType === 'relay' ? 'TURN' : 'Direct'
@@ -113,7 +113,7 @@ export class WebRTCHandler {
         const hasRelay = candidateTypes.has('relay');
         logger.debug(`ICE gathering complete for ${peerId}:`, {
           candidateTypes: Array.from(candidateTypes),
-          usingTURN: hasRelay ? 'YES' : 'NO - Will fail across networks!'
+          usingTURN: hasRelay ? 'YES' : 'NO'
         });
       }
     };
