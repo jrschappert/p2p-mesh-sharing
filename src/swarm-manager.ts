@@ -1,6 +1,8 @@
 import { ModelPackage, ModelChunk, ModelSerializer } from './model-serializer';
 import { Swarm } from './types';
 import * as Utils from './utils';
+import { P2P_CONFIG } from './constants';
+import { logger } from './logger';
 
 // Action types that SwarmManager returns for P2PClient to execute
 export interface SwarmAction {
@@ -14,8 +16,8 @@ export interface SwarmAction {
 
 export class SwarmManager {
   private swarms = new Map<string, Swarm>();
-  private readonly CHUNKS_PER_REQUEST = 5;
-  private readonly REQUEST_TIMEOUT = 15000;
+  private readonly CHUNKS_PER_REQUEST = P2P_CONFIG.CHUNKS_PER_REQUEST;
+  private readonly REQUEST_TIMEOUT = P2P_CONFIG.REQUEST_TIMEOUT;
 
   constructor() {}
 
@@ -54,7 +56,7 @@ export class SwarmManager {
     };
 
     if (!ModelSerializer.verifyChunk(chunk)) {
-      console.error(`❌ Chunk ${chunkIndex} failed verification`);
+      logger.error(`Chunk ${chunkIndex} failed verification`);
       swarm.requestedChunks.delete(chunkIndex);
       return actions;
     }
@@ -63,7 +65,7 @@ export class SwarmManager {
     swarm.ownChunks.add(chunkIndex);
     swarm.requestedChunks.delete(chunkIndex);
 
-    console.log(`✅ Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
+    logger.swarm(`Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
 
     // Action: broadcast have
     actions.push({ type: 'broadcast_have', modelId, chunkIndex });
@@ -71,6 +73,9 @@ export class SwarmManager {
     // Action: report progress
     const progress = swarm.ownChunks.size / swarm.totalChunks * 100;
     actions.push({ type: 'download_progress', modelId, progress });
+
+    // Check for timed out requests (event-driven timeout checking)
+    this.checkTimeouts(swarm);
 
     // Action: download complete or request more
     if (swarm.ownChunks.size === swarm.totalChunks) {
@@ -80,6 +85,28 @@ export class SwarmManager {
     }
 
     return actions;
+  }
+
+  /**
+   * Check for timed out chunk requests and clear them
+   */
+  private checkTimeouts(swarm: Swarm): void {
+    const now = Date.now();
+    const timeoutsToRemove: number[] = [];
+    
+    swarm.requestedChunks.forEach((peerId, chunkIndex) => {
+      // Use swarm start time as a proxy for request time
+      // If a chunk has been requested for longer than REQUEST_TIMEOUT, clear it
+      if (swarm.startTime && now - swarm.startTime > this.REQUEST_TIMEOUT) {
+        timeoutsToRemove.push(chunkIndex);
+      }
+    });
+    
+    timeoutsToRemove.forEach(chunkIndex => {
+      const peerId = swarm.requestedChunks.get(chunkIndex);
+      logger.warn(`Request timeout for chunk ${chunkIndex} from ${peerId}`);
+      swarm.requestedChunks.delete(chunkIndex);
+    });
   }
 
   public requestMoreChunks(modelId: string, peerBitfields: Map<string, Map<string, Uint8Array>>): SwarmAction[] {
@@ -122,13 +149,14 @@ export class SwarmManager {
 
       if (peerRequests >= this.CHUNKS_PER_REQUEST) return;
 
+      let requestedThisRound = 0;
       for (const chunkIdx of needed) {
-        if (peerRequests >= this.CHUNKS_PER_REQUEST) break;
+        if (peerRequests + requestedThisRound >= this.CHUNKS_PER_REQUEST) break;
         
         if (Utils.hasBit(bitfield, chunkIdx) && !swarm.requestedChunks.has(chunkIdx)) {
           actions.push({ type: 'request_chunk', peerId, modelId, chunkIndex: chunkIdx });
           swarm.requestedChunks.set(chunkIdx, peerId);
-          break;
+          requestedThisRound++;
         }
       }
     });
@@ -159,39 +187,17 @@ export class SwarmManager {
     
     const swarm = this.swarms.get(modelId);
     if (!swarm || !swarm.ownChunks.has(chunkIndex)) {
-      console.warn(`We don't have chunk ${chunkIndex}`);
+      logger.warn(`We don't have chunk ${chunkIndex}`);
       return null;
     }
 
     const chunk = swarm.receivedChunks.get(chunkIndex);
     if (!chunk) {
-      console.warn(`Chunk ${chunkIndex} not found in storage`);
+      logger.warn(`Chunk ${chunkIndex} not found in storage`);
       return null;
     }
 
     return { type: 'send_piece', peerId, modelId, chunk };
   }
 
-  public maintainSwarms(peerBitfields: Map<string, Map<string, Uint8Array>>, peerLastActivity: Map<string, number>): SwarmAction[] {
-    const now = Date.now();
-    const actions: SwarmAction[] = [];
-
-    this.swarms.forEach((swarm, modelId) => {
-      // Check for timed out requests
-      swarm.requestedChunks.forEach((peerId, chunkIndex) => {
-        const lastActivity = peerLastActivity.get(peerId);
-        if (!lastActivity || now - lastActivity > this.REQUEST_TIMEOUT) {
-          console.warn(`⚠️ Request timeout for chunk ${chunkIndex} from ${peerId}`);
-          swarm.requestedChunks.delete(chunkIndex);
-        }
-      });
-
-      // Request more if needed
-      if (swarm.ownChunks.size < swarm.totalChunks) {
-        actions.push(...this.requestMoreChunks(modelId, peerBitfields));
-      }
-    });
-
-    return actions;
-  }
 }

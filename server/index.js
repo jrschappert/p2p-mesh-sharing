@@ -135,7 +135,8 @@ function handleAnnounce(ws, clientInfo, message) {
     type: 'peer-joined-swarm',
     modelId,
     peerId: clientInfo.id,
-    complete: complete || false
+    complete: complete || false,
+    peers: stats.peers
   }, clientInfo.id);
 }
 
@@ -159,7 +160,7 @@ function handleSignaling(ws, clientInfo, message) {
  * Handle connection request - broadcast to all peers
  */
 function handleConnectionRequest(ws, clientInfo) {
-  console.log(`🔗 ${clientInfo.id} requesting connections`);
+  console.log(`${clientInfo.id} requesting connections`);
 
   for (const [client] of clients.entries()) {
     if (client !== ws && client.readyState === WebSocket.OPEN) {
@@ -238,7 +239,7 @@ function broadcastToSwarm(modelId, message, excludePeerId = null) {
   });
 
   if (sent > 0) {
-    console.log(`  📤 Broadcast to ${sent} peers in swarm ${modelId}`);
+    console.log(`Broadcast to ${sent} peers in swarm ${modelId}`);
   }
 }
 
@@ -251,7 +252,7 @@ setInterval(() => {
   swarms.forEach((swarm, modelId) => {
     swarm.forEach((peerInfo, peerId) => {
       if (now - peerInfo.lastSeen > STALE_TIMEOUT) {
-        console.log(`🧹 Removing stale peer ${peerId} from swarm ${modelId}`);
+        console.log(`Removing stale peer ${peerId} from swarm ${modelId}`);
         swarm.delete(peerId);
         
         // Notify swarm
@@ -265,7 +266,7 @@ setInterval(() => {
 
     if (swarm.size === 0) {
       swarms.delete(modelId);
-      console.log(`🧹 Removed empty swarm ${modelId}`);
+      console.log(`Removed empty swarm ${modelId}`);
     }
   });
 }, 60000); // Every minute
@@ -274,7 +275,7 @@ setInterval(() => {
  * Periodic stats logging
  */
 setInterval(() => {
-  console.log(`\n� Stats: ${clients.size} peers, ${swarms.size} active swarms`);
+  console.log(`\n Stats: ${clients.size} peers, ${swarms.size} active swarms`);
   
   // Log top swarms
   const topSwarms = Array.from(swarms.entries())
@@ -282,7 +283,7 @@ setInterval(() => {
     .slice(0, 5);
   
   if (topSwarms.length > 0) {
-    console.log('🔥 Top swarms:');
+    console.log('Top swarms:');
     topSwarms.forEach(([modelId, swarm]) => {
       const stats = getSwarmStats(modelId);
       console.log(`   ${modelId.substring(0, 12)}...: ${stats.seeders}S/${stats.leechers}L (${swarm.size} total)`);
@@ -294,5 +295,4 @@ setInterval(() => {
 /**
  * Graceful shutdown
  */
-console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}`);
-console.log(`✨ Ready to track swarms!\n`);
+console.log(`Ready to track swarms!\n`);

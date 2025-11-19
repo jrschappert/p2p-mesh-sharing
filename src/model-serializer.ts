@@ -1,4 +1,5 @@
 import { Vector3 } from "@babylonjs/core/Maths/math";
+import { P2P_CONFIG } from './constants';
 
 /**
  * Represents a serialized model ready for network transmission
@@ -32,8 +33,8 @@ export interface ModelChunk {
  * Handles serialization and chunking of 3D models for P2P transmission
  */
 export class ModelSerializer {
-  // 15KB chunks to stay safely under WebRTC's 16KB limit
-  private static readonly CHUNK_SIZE = 15 * 1024;
+  // Use constant from config
+  private static readonly CHUNK_SIZE = P2P_CONFIG.CHUNK_SIZE;
 
   /**
    * Fetches a model from URL and prepares it for transmission

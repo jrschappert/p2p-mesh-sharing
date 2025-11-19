@@ -1,4 +1,3 @@
-// Expose P2PClient test for browser console
 import P2PClient from "./p2p-client";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
@@ -10,19 +9,17 @@ import { Vector3, Color3 } from "@babylonjs/core/Maths/math";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
-import "@babylonjs/core/Collisions/collisionCoordinator"; // enables collisions
-import "@babylonjs/core/Helpers/sceneHelpers"; // for inspector shortcut
-import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent"; // enables shadows
-
-import { Effect } from "@babylonjs/core/Materials/effect";
-Effect.ResetCache();
-// Optional: uncomment to enable the debug inspector via Shift+Ctrl+Alt+I
-// import "@babylonjs/core/Debug/debugLayer";
-// import "@babylonjs/inspector";
-
-// Import loaders for GLB files
+import "@babylonjs/core/Collisions/collisionCoordinator";
+import "@babylonjs/core/Helpers/sceneHelpers";
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import "@babylonjs/loaders/glTF";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
+import { fal } from "@fal-ai/client";
+import { Effect } from "@babylonjs/core/Materials/effect";
+import { SCENE_CONFIG, PROGRESS_CONFIG, P2P_CONFIG } from './constants';
+import { logger } from './logger';
+
+Effect.ResetCache();
 
 // Add center cursor CSS and modal styles
 const style = document.createElement('style');
@@ -150,14 +147,6 @@ document.body.appendChild(cursor);
 // Setup HUD text management
 const hudElement = document.getElementById('hud') as HTMLElement;
 
-function updateHudText(isLocked: boolean) {
-  if (isLocked) {
-    hudElement.innerHTML = 'Click to Place Model • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
-  } else {
-    hudElement.innerHTML = 'Click to lock mouse • Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>';
-  }
-}
-
 function updateHudWithP2PStatus() {
   const isLocked = document.pointerLockElement === canvas;
   const peerCount = (window as any).p2pClient?.getConnectedPeers().length || 0;
@@ -170,13 +159,9 @@ function updateHudWithP2PStatus() {
   }
 }
 
-// Initialize HUD with unlocked state
-updateHudText(false);
-
 // Listen for pointer lock changes
 document.addEventListener('pointerlockchange', () => {
-  const isLocked = document.pointerLockElement === canvas;
-  updateHudText(isLocked);
+  updateHudWithP2PStatus();
 });
 
 
@@ -206,9 +191,6 @@ modal.innerHTML = `
 document.body.appendChild(modal);
 
 
-// Import FAL client at the top of the file
-import { fal } from "@fal-ai/client";
-
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
 
@@ -216,20 +198,19 @@ const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: 
 const FAL_KEY = (import.meta as any).env.VITE_FAL_KEY || "";
 fal.config({ credentials: FAL_KEY });
 
-// Progress tracking
-interface ProgressState {
-  percentage: number;
-  message: string;
-}
-
+// Progress tracking - allow resets for retries
 let currentProgress = 0;
+let progressPhase: 'flux' | 'trellis' | 'loading' | null = null;
 
-function updateProgress(percentage: number, message: string) {
+function updateProgress(percentage: number, message: string, phase?: 'flux' | 'trellis' | 'loading') {
   const progressFill = document.getElementById('progressFill');
   const progressText = document.getElementById('progressText');
   
-  // Only update if progress is moving forward
-  if (percentage > currentProgress) {
+  // Allow progress to reset when changing phases
+  if (phase && phase !== progressPhase) {
+    progressPhase = phase;
+    currentProgress = percentage;
+  } else if (percentage > currentProgress) {
     currentProgress = percentage;
   }
   
@@ -240,12 +221,17 @@ function updateProgress(percentage: number, message: string) {
   }
 }
 
-// FAL API helper functions using official client
+function resetProgress() {
+  currentProgress = 0;
+  progressPhase = null;
+}
+
+// FAL API helper functions
 async function generateFluxImage(prompt: string): Promise<string> {
-  console.log("Submitting FLUX request...");
-  updateProgress(5, "Starting image generation...");
+  logger.info("Submitting FLUX request...");
+  updateProgress(PROGRESS_CONFIG.INIT, "Starting image generation...", 'flux');
   
-  let fluxProgress = 5;
+  let fluxProgress = PROGRESS_CONFIG.FLUX_PROGRESS_START;
   
   const result: any = await fal.subscribe("fal-ai/flux-pro/v1.1", {
     input: {
@@ -255,15 +241,14 @@ async function generateFluxImage(prompt: string): Promise<string> {
     },
     logs: true,
     onQueueUpdate: (update) => {
-      console.log("FLUX update:", update);
+      logger.debug("FLUX update:", update);
       
       if (update.status === "IN_QUEUE") {
-        updateProgress(10, "Waiting in queue for image generation...");
-        fluxProgress = 10;
+        updateProgress(PROGRESS_CONFIG.FLUX_QUEUE, "Waiting in queue for image generation...", 'flux');
+        fluxProgress = PROGRESS_CONFIG.FLUX_QUEUE;
       } else if (update.status === "IN_PROGRESS") {
-        // Gradually increase progress
-        fluxProgress = Math.min(fluxProgress + 5, 38);
-        updateProgress(fluxProgress, "Generating image with AI...");
+        fluxProgress = Math.min(fluxProgress + PROGRESS_CONFIG.FLUX_INCREMENT, PROGRESS_CONFIG.FLUX_PROGRESS_END);
+        updateProgress(fluxProgress, "Generating image with AI...", 'flux');
       }
     },
   });
@@ -273,15 +258,15 @@ async function generateFluxImage(prompt: string): Promise<string> {
     throw new Error("No image URL returned from FLUX");
   }
   
-  updateProgress(40, "✓ Image generated successfully!");
+  updateProgress(PROGRESS_CONFIG.FLUX_COMPLETE, "✓ Image generated successfully!", 'flux');
   return imageUrl;
 }
 
 async function generateTrellisModel(imageUrl: string): Promise<string> {
-  console.log("Submitting Trellis request...");
-  updateProgress(42, "Starting 3D model conversion...");
+  logger.info("Submitting Trellis request...");
+  updateProgress(PROGRESS_CONFIG.TRELLIS_START, "Starting 3D model conversion...", 'trellis');
   
-  let trellisProgress = 42;
+  let trellisProgress = PROGRESS_CONFIG.TRELLIS_START;
   let hasStartedProcessing = false;
   
   const result: any = await fal.subscribe("fal-ai/trellis", {
@@ -290,21 +275,19 @@ async function generateTrellisModel(imageUrl: string): Promise<string> {
     },
     logs: true,
     onQueueUpdate: (update) => {
-      console.log("Trellis update:", update);
+      logger.debug("Trellis update:", update);
       
       if (update.status === "IN_QUEUE") {
-        updateProgress(45, "Waiting in queue for 3D conversion...");
-        trellisProgress = 45;
+        updateProgress(PROGRESS_CONFIG.TRELLIS_QUEUE, "Waiting in queue for 3D conversion...", 'trellis');
+        trellisProgress = PROGRESS_CONFIG.TRELLIS_QUEUE;
       } else if (update.status === "IN_PROGRESS") {
         if (!hasStartedProcessing) {
           hasStartedProcessing = true;
-          trellisProgress = 50;
-          updateProgress(trellisProgress, "Processing image for 3D conversion...");
+          trellisProgress = PROGRESS_CONFIG.TRELLIS_PROGRESS_START;
+          updateProgress(trellisProgress, "Processing image for 3D conversion...", 'trellis');
         } else {
-          // Gradually increase from 50% to 92%
-          trellisProgress = Math.min(trellisProgress + 3, 92);
+          trellisProgress = Math.min(trellisProgress + PROGRESS_CONFIG.TRELLIS_INCREMENT, PROGRESS_CONFIG.TRELLIS_PROGRESS_END);
           
-          // Update message based on progress range
           let message = "Converting to 3D model...";
           if (trellisProgress < 60) {
             message = "Analyzing image depth...";
@@ -316,7 +299,7 @@ async function generateTrellisModel(imageUrl: string): Promise<string> {
             message = "Finalizing 3D model...";
           }
           
-          updateProgress(trellisProgress, message);
+          updateProgress(trellisProgress, message, 'trellis');
         }
       }
     },
@@ -327,18 +310,18 @@ async function generateTrellisModel(imageUrl: string): Promise<string> {
     throw new Error("No model URL returned from Trellis");
   }
   
-  updateProgress(95, "✓ 3D model generated successfully!");
+  updateProgress(PROGRESS_CONFIG.TRELLIS_COMPLETE, "✓ 3D model generated successfully!", 'trellis');
   return modelUrl;
 }
 
 async function generateModelFromPrompt(prompt: string): Promise<string> {
-  console.log("🖼️ Generating image with FLUX...");
+  logger.info("Generating image with FLUX...");
   const imageUrl = await generateFluxImage(prompt);
-  console.log("✅ Image generated:", imageUrl);
+  logger.info("Image generated:", imageUrl);
 
-  console.log("🧩 Converting to 3D with Trellis...");
+  logger.info("Converting to 3D with Trellis...");
   const modelUrl = await generateTrellisModel(imageUrl);
-  console.log("✅ Model generated:", modelUrl);
+  logger.info("Model generated:", modelUrl);
 
   return modelUrl;
 }
@@ -348,38 +331,35 @@ function createScene(): Scene {
 const scene = new Scene(engine);
 
 
-// Lighting - Directional light for shadows (from behind player)
+// Lighting
 const light = new DirectionalLight("dirLight", new Vector3(0, -1, 1), scene);
 light.position = new Vector3(0, 50, -20);
-light.intensity = .3;
+light.intensity = SCENE_CONFIG.DIRECTIONAL_LIGHT_INTENSITY;
 
-// Add ambient light so shadows are visible
 const ambientLight = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambientLight.intensity = .9;
+ambientLight.intensity = SCENE_CONFIG.AMBIENT_LIGHT_INTENSITY;
 
 // Shadow generator
-const shadowGenerator = new ShadowGenerator(2048, light);
+const shadowGenerator = new ShadowGenerator(P2P_CONFIG.SHADOW_MAP_SIZE, light);
 shadowGenerator.usePercentageCloserFiltering = true;
 shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH;
-shadowGenerator.bias = 0.00001; // Fixes shadow acne
-shadowGenerator.normalBias = 0.05; // Additional fix for acne
-shadowGenerator.darkness = 0; // Make shadows more visible (0 = black, 1 = no shadow)
-
+shadowGenerator.bias = SCENE_CONFIG.SHADOW_BIAS;
+shadowGenerator.normalBias = SCENE_CONFIG.SHADOW_NORMAL_BIAS;
+shadowGenerator.darkness = SCENE_CONFIG.SHADOW_DARKNESS;
 
 // Collisions + gravity
 scene.collisionsEnabled = true;
-scene.gravity = new Vector3(0, -0.5, 0);
-
+scene.gravity = new Vector3(0, SCENE_CONFIG.GRAVITY, 0);
 
 // Camera (first-person)
-const camera = new UniversalCamera("fpCamera", new Vector3(0, 2, -6), scene);
+const camera = new UniversalCamera("fpCamera", new Vector3(0, SCENE_CONFIG.CAMERA_HEIGHT, SCENE_CONFIG.CAMERA_START_Z), scene);
 camera.attachControl(canvas, true);
 camera.checkCollisions = true;
 camera.applyGravity = true;
-camera.ellipsoid = new Vector3(0.5, 0.9, 0.5); // player collision capsule
-camera.minZ = 0.05;
-camera.speed = 0.35; // tune movement speed
-camera.inertia = 0.7; // mouse look smoothing (lower = snappier)
+camera.ellipsoid = new Vector3(SCENE_CONFIG.PLAYER_ELLIPSOID.x, SCENE_CONFIG.PLAYER_ELLIPSOID.y, SCENE_CONFIG.PLAYER_ELLIPSOID.z);
+camera.minZ = SCENE_CONFIG.CAMERA_MIN_Z;
+camera.speed = SCENE_CONFIG.CAMERA_SPEED;
+camera.inertia = SCENE_CONFIG.CAMERA_INERTIA;
 
 
 // WASD bindings (in addition to arrow keys)
@@ -396,40 +376,36 @@ camera.keysRight.push(68); // D
 
 
   // Ground
-  const ground = MeshBuilder.CreateGround("ground", { width: 200, height: 200 }, scene);
+  const ground = MeshBuilder.CreateGround("ground", { width: SCENE_CONFIG.GROUND_SIZE, height: SCENE_CONFIG.GROUND_SIZE }, scene);
   ground.checkCollisions = true;
   ground.receiveShadows = true;
   
-  // Add material to ground
   const groundMaterial = new StandardMaterial("groundMat", scene);
-  groundMaterial.diffuseColor = new Color3(0.7, 0.7, 0.7); // light gray
+  groundMaterial.diffuseColor = new Color3(SCENE_CONFIG.GROUND_COLOR.r, SCENE_CONFIG.GROUND_COLOR.g, SCENE_CONFIG.GROUND_COLOR.b);
   ground.material = groundMaterial;
 
-
-  // A few boxes to weave around
+  // Boxes to weave around
   const boxMaterial = new StandardMaterial("boxMat", scene);
-  boxMaterial.diffuseColor = new Color3(0.1, 0.2, 0.5); // dark blue
+  boxMaterial.diffuseColor = new Color3(SCENE_CONFIG.BOX_COLOR.r, SCENE_CONFIG.BOX_COLOR.g, SCENE_CONFIG.BOX_COLOR.b);
   
-  for (let i = 0; i < 30; i++) {
-  const box = MeshBuilder.CreateBox(`box_${i}`, { size: 2 }, scene);
-  box.position = new Vector3((Math.random() - 0.5) * 60, 1, (Math.random() - 0.5) * 60);
-  box.checkCollisions = true;
-  box.material = boxMaterial;
-  
-  // Add to shadow caster
-  shadowGenerator.addShadowCaster(box);
-  box.receiveShadows = true;
+  for (let i = 0; i < SCENE_CONFIG.NUM_BOXES; i++) {
+    const box = MeshBuilder.CreateBox(`box_${i}`, { size: SCENE_CONFIG.BOX_SIZE }, scene);
+    box.position = new Vector3((Math.random() - 0.5) * 60, 1, (Math.random() - 0.5) * 60);
+    box.checkCollisions = true;
+    box.material = boxMaterial;
+    shadowGenerator.addShadowCaster(box);
+    box.receiveShadows = true;
   }
 
   // Placement preview cube
-  const previewCube = MeshBuilder.CreateBox("previewCube", { size: 2 }, scene);
+  const previewCube = MeshBuilder.CreateBox("previewCube", { size: SCENE_CONFIG.PREVIEW_CUBE_SIZE }, scene);
   const previewMaterial = new StandardMaterial("previewMat", scene);
-  previewMaterial.diffuseColor = new Color3(0.2, 0.8, 0.2); // green
-  previewMaterial.alpha = 0.5; // semi-transparent
+  previewMaterial.diffuseColor = new Color3(SCENE_CONFIG.PREVIEW_COLOR.r, SCENE_CONFIG.PREVIEW_COLOR.g, SCENE_CONFIG.PREVIEW_COLOR.b);
+  previewMaterial.alpha = SCENE_CONFIG.PREVIEW_ALPHA;
   previewCube.material = previewMaterial;
   previewCube.position = new Vector3(0, 1, 0);
-  previewCube.checkCollisions = false; // don't collide with camera
-  previewCube.isPickable = false; // don't interfere with raycasting
+  previewCube.checkCollisions = false;
+  previewCube.isPickable = false;
   
   // Update preview cube position based on where player is looking
   scene.registerBeforeRender(() => {
@@ -469,13 +445,14 @@ camera.keysRight.push(68); // D
 
   // Function to load and place a model in the scene
   async function loadAndPlaceModel(modelUrl: string, shareWithPeers: boolean = true, prompt?: string) {
-    updateProgress(97, "Loading model into scene...");
+    updateProgress(PROGRESS_CONFIG.LOADING_SCENE, "Loading model into scene...", 'loading');
 
     if (pendingPlacement && pendingRotation !== null) {
-      const result = await SceneLoader.ImportMeshAsync("", modelUrl, "", scene);
-      const meshes = result.meshes;
+      try {
+        const result = await SceneLoader.ImportMeshAsync("", modelUrl, "", scene);
+        const meshes = result.meshes;
 
-      if (meshes.length > 0) {
+        if (meshes.length > 0) {
         const rootMesh = meshes[0];
         
         // Calculate bounding box for the entire model
@@ -520,8 +497,8 @@ camera.keysRight.push(68); // D
         const modelWidth = Math.max(maxX - minX, maxZ - minZ);
         const modelSize = Math.max(modelHeight, modelWidth);
         
-        // Scale to approximately match preview cube size (2 units)
-        const targetSize = 2;
+        // Scale to approximately match preview cube size
+        const targetSize = SCENE_CONFIG.TARGET_MODEL_SIZE;
         const scale = modelSize > 0 ? targetSize / modelSize : 1;
         rootMesh.scaling = new Vector3(scale, scale, scale);
                 
@@ -557,11 +534,11 @@ camera.keysRight.push(68); // D
           }
         });
         
-        updateProgress(100, "Model placed successfully!");
+        updateProgress(PROGRESS_CONFIG.COMPLETE, "Model placed successfully!", 'loading');
         
         // Share with peers via P2P if requested
         if (shareWithPeers && (window as any).p2pClient) {
-          console.log('📤 Sharing model with peers...');
+          logger.info('Sharing model with peers...');
           await (window as any).p2pClient.shareModel(
             modelUrl,
             new Vector3(pendingPlacement.x, rootMesh.position.y, pendingPlacement.z),
@@ -569,8 +546,12 @@ camera.keysRight.push(68); // D
             new Vector3(scale, scale, scale),
             prompt
           );
-          console.log('✅ Model shared with peers');
+          logger.info('Model shared with peers');
         }
+      }
+      } catch (error) {
+        logger.error('Failed to load and place model:', error);
+        throw error;
       }
     }
   }
@@ -614,29 +595,25 @@ camera.keysRight.push(68); // D
     testBtn.disabled = true;
     cancelBtn.disabled = true;
     
-    currentProgress = 0;
+    resetProgress();
     updateProgress(10, "Loading test model...");
 
     try {
-      // Use the cached test model URL - convert to absolute URL for P2P sharing
       const testModelUrl = new URL("models/test_model_1.glb", window.location.href).href;
       
       updateProgress(50, "Preparing test model...");
-      
-      // Load and place the model and share with peers
       await loadAndPlaceModel(testModelUrl, true, "Test Model");
       
-      updateProgress(100, "Test model placed!");
+      updateProgress(PROGRESS_CONFIG.COMPLETE, "Test model placed!");
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Close modal
       overlay.style.display = 'none';
       modal.style.display = 'none';
       pendingPlacement = null;
       pendingRotation = null;
 
     } catch (error) {
-      console.error('Error loading test model:', error);
+      logger.error('Error loading test model:', error);
       alert('Failed to load test model. Check console for details.');
     } finally {
       progressContainer.style.display = 'none';
@@ -671,20 +648,15 @@ camera.keysRight.push(68); // D
     generateBtn.disabled = true;
     cancelBtn.disabled = true;
     
-    currentProgress = 0; // Reset progress
-    updateProgress(0, "Initializing...");
+    resetProgress();
+    updateProgress(PROGRESS_CONFIG.INIT, "Initializing...");
 
     try {
-      // Generate model
       const modelUrl = await generateModelFromPrompt(prompt);
-      
-      // Load and place the model and share with peers
       await loadAndPlaceModel(modelUrl, true, prompt);
       
-      // Wait a moment to show 100% completion
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Close modal
       overlay.style.display = 'none';
       modal.style.display = 'none';
       promptInput.value = '';
@@ -692,7 +664,7 @@ camera.keysRight.push(68); // D
       pendingRotation = null;
 
     } catch (error) {
-      console.error('Error generating model:', error);
+      logger.error('Error generating model:', error);
       alert('Failed to generate model. Check console for details.');
     } finally {
       progressContainer.style.display = 'none';
@@ -710,18 +682,8 @@ camera.keysRight.push(68); // D
   });
 
 
-  // Simple sky tint via clear color
-  scene.clearColor.set(0.53, 0.81, 0.92, 1); // light blue
-
-
-  // Debug inspector hotkey (Shift+Ctrl+Alt+I)
-  // window.addEventListener("keydown", (ev) => {
-  // if (ev.shiftKey && ev.ctrlKey && ev.altKey && ev.code === "KeyI") {
-  // if ((scene as any).debugLayer.isVisible()) (scene as any).debugLayer.hide();
-  // else (scene as any).debugLayer.show();
-  // }
-  // });
-
+  // Sky color
+  scene.clearColor.set(SCENE_CONFIG.SKY_COLOR.r, SCENE_CONFIG.SKY_COLOR.g, SCENE_CONFIG.SKY_COLOR.b, SCENE_CONFIG.SKY_COLOR.a);
 
   return scene;
 }
@@ -730,38 +692,35 @@ camera.keysRight.push(68); // D
 const scene = createScene();
 
 // Initialize P2P Client for multi-tab model sharing
-const p2pClient = new P2PClient(scene, 'ws://localhost:8080');
+const p2pClient = new P2PClient(scene);
 
 // Expose to window for debugging
 (window as any).p2pClient = p2pClient;
 
 // Setup P2P callbacks
 p2pClient.setOnPeerConnected((peerId) => {
-  console.log(`🤝 Connected to peer: ${peerId}`);
+  logger.info(`Connected to peer: ${peerId}`);
   updateHudWithP2PStatus();
 });
 
 p2pClient.setOnPeerDisconnected((peerId) => {
-  console.log(`👋 Peer disconnected: ${peerId}`);
+  logger.info(`Peer disconnected: ${peerId}`);
   updateHudWithP2PStatus();
 });
 
 p2pClient.setOnModelReceived((modelPackage) => {
-  console.log(`📥 Received model from peer: ${modelPackage.id}`);
-  // Model is automatically loaded into scene by P2PClient
+  logger.info(`Received model from peer: ${modelPackage.id}`);
   updateHudWithP2PStatus();
 });
 
 p2pClient.setOnDownloadProgress((modelId, progress) => {
-  console.log(`📊 Download progress for ${modelId}: ${progress.toFixed(1)}%`);
+  logger.debug(`Download progress for ${modelId}: ${progress.toFixed(1)}%`);
 });
 
-// Update HUD periodically to show peer status
+// Update HUD periodically
 setInterval(() => {
-  if (document.pointerLockElement !== canvas) {
-    updateHudWithP2PStatus();
-  }
-}, 2000);
+  updateHudWithP2PStatus();
+}, P2P_CONFIG.PEER_STATUS_UPDATE_INTERVAL);
 
 engine.runRenderLoop(() => {
   scene.render();
@@ -771,12 +730,3 @@ engine.runRenderLoop(() => {
 window.addEventListener("resize", () => {
   engine.resize();
 });
-
-import { runAllLocalTests } from "./chunking-test";
-
-// // Add keyboard shortcut
-// window.addEventListener("keydown", async (e) => {
-//   if (e.key === 't') {
-//     await testChunking("models/test_model_1.glb");
-//   }
-// });

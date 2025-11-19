@@ -34,6 +34,11 @@ jobs:
         run: npm run build
         env:
           VITE_FAL_KEY: ${{ secrets.FAL_KEY }}
+          VITE_TURN_URLS: ${{ secrets.VITE_TURN_URLS }}
+          VITE_TURN_USERNAME: ${{ secrets.VITE_TURN_USERNAME}}
+          VITE_TURN_CREDENTIAL: ${{ secrets.VITE_TURN_CREDENTIAL}}
+          VITE_STUN_URL: ${{ secrets.VITE_STUN_URL }}
+          VITE_WEBSOCKET_URL: ${{ secrets.VITE_WEBSOCKET_URL }}
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
