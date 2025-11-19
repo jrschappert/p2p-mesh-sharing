@@ -96,7 +96,7 @@ wss.on('connection', (ws) => {
  * Peer announces they have a model
  */
 function handleAnnounce(ws, clientInfo, message) {
-  const { modelId, complete, chunks } = message;
+  const { modelId, complete } = message;
   
   if (!modelId) {
     console.error('Announce missing modelId');
@@ -113,7 +113,6 @@ function handleAnnounce(ws, clientInfo, message) {
   swarm.set(clientInfo.id, {
     peerId: clientInfo.id,
     complete: complete || false,
-    chunks: chunks ? new Set(chunks) : new Set(),
     lastSeen: Date.now()
   });
 
@@ -201,8 +200,7 @@ function getSwarmStats(modelId) {
     
     peers.push({
       id: peerId,
-      complete: peerInfo.complete,
-      chunks: peerInfo.chunks ? Array.from(peerInfo.chunks) : []
+      complete: peerInfo.complete
     });
   });
 

@@ -14,7 +14,6 @@ export interface AnnounceMessage {
   type: 'announce';
   modelId: string;
   complete: boolean;
-  chunks?: number[];
 }
 
 export interface AnnounceResponseMessage {
@@ -120,7 +119,6 @@ export type P2PMessage =
 export interface PeerInfo {
   id: string;
   complete: boolean;
-  chunks?: number[];
 }
 
 // Server-side types
@@ -133,6 +131,5 @@ export interface ClientInfo {
 export interface SwarmPeerInfo {
   peerId: string;
   complete: boolean;
-  chunks: Set<number>;
   lastSeen: number;
 }

@@ -160,7 +160,7 @@ export class P2PClient {
     }
   }
   
-  private announceToTracker(modelId: string, complete: boolean, chunks: number[] = []): void {
+  private announceToTracker(modelId: string, complete: boolean): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       logger.warn('Cannot announce to tracker - not connected');
       return;
@@ -170,8 +170,7 @@ export class P2PClient {
       this.ws.send(JSON.stringify({
         type: 'announce',
         modelId,
-        complete,
-        chunks
+        complete
       }));
 
       logger.p2p(`Announced ${modelId} to tracker (complete: ${complete})`);
@@ -479,7 +478,7 @@ export class P2PClient {
     this.swarmManager?.createSwarm(modelId, metadata);
     logger.info(`Starting download for ${modelId} (${metadata.metadata.totalChunks} chunks)`);
     
-    this.announceToTracker(modelId, false, []);
+    this.announceToTracker(modelId, false);
     
     const actions = this.swarmManager?.requestMoreChunks(modelId, this.getPeerBitfields());
     if (actions && actions.length > 0) {
