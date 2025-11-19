@@ -61,14 +61,6 @@ export const SCENE_CONFIG = {
   BOX_SIZE: 2,
 } as const;
 
-export const SERVER_CONFIG = {
-  DEFAULT_PORT: 8080,
-  STALE_TIMEOUT: 5 * 60 * 1000, // 5 minutes
-  STATS_LOG_INTERVAL: 30000, // 30 seconds
-  CLEANUP_INTERVAL: 60000, // 1 minute
-  TOP_SWARMS_DISPLAY: 5,
-} as const;
-
 export const PROGRESS_CONFIG = {
   // Progress milestones for AI generation
   INIT: 0 as number,

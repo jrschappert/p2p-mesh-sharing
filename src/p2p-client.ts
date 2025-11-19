@@ -200,16 +200,6 @@ export class P2PClient {
         }
       }
     }
-
-    // For existing connections, log complete peers
-    peers.forEach(peer => {
-      if (peer.id !== this.clientId && peer.complete) {
-        const existingPeer = this.webRTCHandler?.getPeer(peer.id);
-        if (existingPeer?.dataChannel?.readyState === 'open') {
-          logger.debug(`Peer ${peer.id} has complete model ${modelId}`);
-        }
-      }
-    });
   }
 
   private handleMetadata(peerId: string, message: any): void {
