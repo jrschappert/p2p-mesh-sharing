@@ -8,6 +8,9 @@ import { SwarmManager, SwarmAction } from './swarm-manager';
 import { P2P_CONFIG } from './constants';
 import { logger } from './logger';
 import type { TrackerMessage, P2PMessage } from './message-types';
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
+import { Effect } from "@babylonjs/core/Materials/effect";
 
 /**
  * BitTorrent-inspired P2P client for 3D model sharing. This class is the main coordinator.
@@ -422,6 +425,11 @@ export class P2PClient {
         rootMesh.rotation = new Vector3(swarm.metadata.rotation.x, swarm.metadata.rotation.y, swarm.metadata.rotation.z);
         rootMesh.scaling = new Vector3(swarm.metadata.scale.x, swarm.metadata.scale.y, swarm.metadata.scale.z);
         this.onModelReceived?.(swarm.metadata);
+        result.meshes.forEach(mesh => {
+          if (mesh.material instanceof PBRMaterial) {
+            mesh.material.unlit = true;
+          }
+        });
       }
       URL.revokeObjectURL(blobUrl);
     } catch (error) {

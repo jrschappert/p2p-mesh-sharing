@@ -388,9 +388,16 @@ camera.keysRight.push(68); // D
   const boxMaterial = new StandardMaterial("boxMat", scene);
   boxMaterial.diffuseColor = new Color3(SCENE_CONFIG.BOX_COLOR.r, SCENE_CONFIG.BOX_COLOR.g, SCENE_CONFIG.BOX_COLOR.b);
   
+  // Seed random for consistent box placement
+  let seed = 12345; // Fixed seed for consistent positions
+  const seededRandom = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+
   for (let i = 0; i < SCENE_CONFIG.NUM_BOXES; i++) {
     const box = MeshBuilder.CreateBox(`box_${i}`, { size: SCENE_CONFIG.BOX_SIZE }, scene);
-    box.position = new Vector3((Math.random() - 0.5) * 60, 1, (Math.random() - 0.5) * 60);
+    box.position = new Vector3((seededRandom() - 0.5) * 60, 1, (seededRandom() - 0.5) * 60);
     box.checkCollisions = true;
     box.material = boxMaterial;
     shadowGenerator.addShadowCaster(box);
