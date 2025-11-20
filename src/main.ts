@@ -327,7 +327,7 @@ async function generateModelFromPrompt(prompt: string): Promise<string> {
 }
 
 
-function createScene(): Scene {
+function createScene(): {scene: Scene, shadowGenerator: ShadowGenerator} {
 const scene = new Scene(engine);
 
 
@@ -692,14 +692,14 @@ camera.keysRight.push(68); // D
   // Sky color
   scene.clearColor.set(SCENE_CONFIG.SKY_COLOR.r, SCENE_CONFIG.SKY_COLOR.g, SCENE_CONFIG.SKY_COLOR.b, SCENE_CONFIG.SKY_COLOR.a);
 
-  return scene;
+  return { scene, shadowGenerator };
 }
 
 
-const scene = createScene();
+const {scene, shadowGenerator} = createScene();
 
 // Initialize P2P Client for multi-tab model sharing
-const p2pClient = new P2PClient(scene);
+const p2pClient = new P2PClient(scene, shadowGenerator);
 
 // Expose to window for debugging
 (window as any).p2pClient = p2pClient;

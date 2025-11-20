@@ -11,6 +11,9 @@ import type { TrackerMessage, P2PMessage } from './message-types';
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Effect } from "@babylonjs/core/Materials/effect";
+import { ShadowGenerator } from '@babylonjs/core';
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
+import { privateDecrypt } from 'crypto';
 
 /**
  * BitTorrent-inspired P2P client for 3D model sharing. This class is the main coordinator.
@@ -21,6 +24,7 @@ export class P2PClient {
   private webRTCHandler: WebRTCHandler | null = null;
   private swarmManager: SwarmManager | null = null;
   private scene: Scene;
+  private shadowGenerator: ShadowGenerator;
   
   // Track which peers have received metadata for each model
   private metadataSentTo = new Map<string, Set<string>>(); // modelId -> Set<peerId>
@@ -31,11 +35,12 @@ export class P2PClient {
   private onModelReceived?: (modelPackage: ModelPackage) => void;
   private onDownloadProgress?: (modelId: string, progress: number) => void;
   
-  constructor(scene: Scene) {
+  constructor(scene: Scene, shadowGenerator: ShadowGenerator) {
     this.scene = scene;
     const url = import.meta.env.VITE_WEBSOCKET_URL || 'wss://p2p-mesh-sharing.onrender.com';
     logger.info("Connecting to tracker:", url);
     this.connectToTracker(url);
+    this.shadowGenerator = shadowGenerator;
     
     // Handle tab/window close to properly disconnect
     window.addEventListener('beforeunload', () => {
@@ -424,6 +429,7 @@ export class P2PClient {
           if (mesh.material instanceof PBRMaterial) {
             mesh.material.unlit = true;
           }
+          this.shadowGenerator.addShadowCaster(mesh);
         });
       }
       URL.revokeObjectURL(blobUrl);
