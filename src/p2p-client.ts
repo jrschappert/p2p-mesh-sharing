@@ -314,11 +314,6 @@ export class P2PClient {
     
     Utils.setBit(bitfield, chunkIndex);
     logger.debug(`Peer ${peerId} now has chunk ${chunkIndex} of ${modelId}`);
-    
-    const actions = this.swarmManager?.requestChunksFromPeer(peerId, modelId, bitfield);
-    if (actions) {
-      this.executeActions(actions);
-    }
   }
 
   // Execute actions returned by SwarmManager
