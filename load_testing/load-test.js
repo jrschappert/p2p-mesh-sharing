@@ -1,0 +1,392 @@
+// loadTest.js - Load testing script for p2p-mesh-sharing
+// Run with: node loadTest.js
+
+import puppeteer from 'puppeteer';
+
+// ============================================================
+// CONFIGURATION - Modify these parameters as needed
+// ============================================================
+const CONFIG = {
+  baseUrl: 'http://localhost:5173',
+  numClients: 2,                    // Number of simultaneous clients
+  delayBetweenClients: 2000,        // ms delay between launching clients
+  modelPlacementDelay: 5000,        // ms to wait before placing model
+  testDuration: 60000,              // Total test duration in ms
+  headless: false,                  // Set to true for headless mode
+  viewport: { width: 800, height: 600 },
+};
+
+// Test models - these should exist in public/models/
+const TEST_MODELS = [
+  'test_model_1.glb',
+  'test_model_2.glb',
+];
+
+class LoadTestClient {
+  constructor(id) {
+    this.id = id;
+    this.browser = null;
+    this.page = null;
+    this.modelFile = TEST_MODELS[id % TEST_MODELS.length];
+    this.modelPlaced = false;
+    this.metrics = {
+      startTime: null,
+      modelPlacementStart: null,
+      modelPlacementEnd: null,
+      errors: []
+    };
+  }
+
+  async launch() {
+    console.log(`[Client ${this.id}] Launching browser...`);
+    
+    try {
+      // Simple browser launch like the working example
+      this.browser = await puppeteer.launch({ 
+        headless: CONFIG.headless 
+      });
+
+      this.page = await this.browser.newPage();
+      await this.page.setViewport(CONFIG.viewport);
+
+      // Monitor console messages
+      this.page.on('console', msg => {
+        const text = msg.text();
+        if (!text.includes('Download the Vue Devtools') && !text.includes('[vite]')) {
+          console.log(`[Client ${this.id}] Console: ${text}`);
+        }
+      });
+
+      // Monitor errors
+      this.page.on('pageerror', error => {
+        console.error(`[Client ${this.id}] Page Error:`, error.message);
+        this.metrics.errors.push(error.message);
+      });
+
+      this.metrics.startTime = Date.now();
+      
+      // Simple navigation like the working example
+      await this.page.goto(CONFIG.baseUrl);
+      
+      console.log(`[Client ${this.id}] Page loaded successfully`);
+      
+      // Wait longer for the page to fully initialize
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Check if everything loaded
+      const diagnostics = await this.page.evaluate(() => {
+        const canvas = document.getElementById('renderCanvas');
+        const gl = canvas ? (canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) : null;
+        
+        return {
+          hasCanvas: !!canvas,
+          hasWebGL: !!gl,
+          hasBabylon: !!window.BABYLON,
+          hasScene: !!window.scene,
+          glVersion: gl ? gl.getParameter(gl.VERSION) : null,
+        };
+      });
+
+      console.log(`[Client ${this.id}] Diagnostics:`, diagnostics);
+
+      // Scene is ready - that's what matters most
+      if (!diagnostics.hasScene) {
+        console.error(`[Client ${this.id}] Scene not available`);
+        this.metrics.errors.push('Scene not available');
+        return false;
+      }
+
+      console.log(`[Client ${this.id}] Scene is ready!`);
+      return true;
+    } catch (error) {
+      console.error(`[Client ${this.id}] Launch error:`, error.message);
+      this.metrics.errors.push(error.message);
+      return false;
+    }
+  }
+
+  async placeTestModel() {
+    if (this.modelPlaced) {
+      console.log(`[Client ${this.id}] Model already placed`);
+      return;
+    }
+
+    console.log(`[Client ${this.id}] Placing test model: ${this.modelFile}`);
+    this.metrics.modelPlacementStart = Date.now();
+
+    try {
+      const success = await this.page.evaluate(async (modelFile, clientId) => {
+        try {
+          if (!window.scene || !window.SceneLoader || !window.Vector3) {
+            console.error(`Client ${clientId}: Required Babylon APIs missing`);
+            return false;
+          }
+
+          // Build model URL
+          const modelUrl = new URL(`models/${modelFile}`, window.location.href).href;
+
+          // Choose random X/Z in [-5, 5]     → 10x10 square
+          const x = (Math.random() * 10) - 5;
+          const z = (Math.random() * 10) - 5;
+
+          console.log(`Client ${clientId}: Loading model at (${x.toFixed(2)}, 0, ${z.toFixed(2)})`);
+
+          // Load model using ImportMeshAsync (cleanest)
+          const result = await window.SceneLoader.ImportMeshAsync(
+            "",         // mesh name(s) filter
+            "",         // root path (unused when full URL given)
+            modelUrl,   // file
+            window.scene
+          );
+
+          if (!result || !result.meshes || result.meshes.length === 0) {
+            console.error(`Client ${clientId}: No meshes returned for model`);
+            return false;
+          }
+
+          const mesh = result.meshes[0];
+
+          // Place the model
+          mesh.position = new window.Vector3(x, 0, z);
+          mesh.rotation = mesh.rotation || new window.Vector3(0, 0, 0);
+          mesh.rotation.y = Math.random() * Math.PI * 2;
+
+          console.log(`Client ${clientId}: Model placed successfully`);
+          return true;
+
+        } catch (err) {
+          console.error(`Client ${clientId}: Exception during placement`, err);
+          return false;
+        }
+      }, this.modelFile, this.id);
+
+      // Finish timing
+      this.metrics.modelPlacementEnd = Date.now();
+      this.modelPlaced = success;
+
+      const placementTime = this.metrics.modelPlacementEnd - this.metrics.modelPlacementStart;
+
+      if (success) {
+        console.log(`[Client ${this.id}] Model placed successfully in ${placementTime}ms`);
+      } else {
+        console.error(`[Client ${this.id}] Model placement failed after ${placementTime}ms`);
+        this.metrics.errors.push('Model placement failed');
+      }
+
+    } catch (error) {
+      console.error(`[Client ${this.id}] Model placement error: ${error.message}`);
+      this.metrics.errors.push(error.message);
+    }
+  }
+
+
+  async monitorScene() {
+    try {
+      const sceneData = await this.page.evaluate(() => {
+        const data = {
+          meshCount: 0,
+          peerCount: 0,
+          cameraPosition: null
+        };
+
+        // Try to get Babylon.js scene data
+        if (window.scene) {
+          data.meshCount = window.scene.meshes ? window.scene.meshes.length : 0;
+          if (window.scene.activeCamera) {
+            data.cameraPosition = {
+              x: Math.round(window.scene.activeCamera.position.x),
+              y: Math.round(window.scene.activeCamera.position.y),
+              z: Math.round(window.scene.activeCamera.position.z)
+            };
+          }
+        }
+
+        // Try to get peer connection data
+        if (window.peerConnections) {
+          data.peerCount = Object.keys(window.peerConnections).length;
+        } else if (window.peers) {
+          data.peerCount = window.peers.length || 0;
+        }
+
+        return data;
+      });
+
+      console.log(`[Client ${this.id}] Scene - Meshes: ${sceneData.meshCount}, Peers: ${sceneData.peerCount}`);
+      return sceneData;
+    } catch (error) {
+      // Silently fail monitoring to avoid spam
+      return null;
+    }
+  }
+
+  async cleanup() {
+    console.log(`[Client ${this.id}] Cleaning up...`);
+    if (this.browser) {
+      await this.browser.close();
+    }
+  }
+
+  getMetrics() {
+    return {
+      clientId: this.id,
+      modelFile: this.modelFile,
+      modelPlaced: this.modelPlaced,
+      totalTime: this.metrics.modelPlacementEnd 
+        ? this.metrics.modelPlacementEnd - this.metrics.startTime 
+        : Date.now() - this.metrics.startTime,
+      placementTime: this.metrics.modelPlacementEnd && this.metrics.modelPlacementStart
+        ? this.metrics.modelPlacementEnd - this.metrics.modelPlacementStart
+        : null,
+      errors: this.metrics.errors
+    };
+  }
+}
+
+class LoadTestRunner {
+  constructor(config) {
+    this.config = config;
+    this.clients = [];
+    this.running = false;
+    this.monitoringInterval = null;
+  }
+
+  async run() {
+    console.log('='.repeat(60));
+    console.log('P2P Mesh Sharing - Load Test');
+    console.log('='.repeat(60));
+    console.log(`Clients: ${this.config.numClients}`);
+    console.log(`Duration: ${this.config.testDuration}ms (${this.config.testDuration/1000}s)`);
+    console.log(`Headless: ${this.config.headless}`);
+    console.log('='.repeat(60));
+    console.log('');
+
+    this.running = true;
+
+    // Launch clients with staggered delays
+    for (let i = 0; i < this.config.numClients; i++) {
+      const client = new LoadTestClient(i);
+      this.clients.push(client);
+
+      const success = await client.launch();
+      
+      if (success) {
+        // Wait before placing model
+        setTimeout(() => {
+          if (this.running) {
+            client.placeTestModel();
+          }
+        }, this.config.modelPlacementDelay);
+
+        // Monitor scene periodically (every 15 seconds)
+        setInterval(() => {
+          if (this.running) {
+            client.monitorScene();
+          }
+        }, 15000);
+      }
+
+      // Delay before launching next client
+      if (i < this.config.numClients - 1) {
+        await this.delay(this.config.delayBetweenClients);
+      }
+    }
+
+    console.log('');
+    console.log(`All ${this.clients.length} clients launched. Test running...`);
+    console.log('');
+
+    // Run for specified duration
+    await this.delay(this.config.testDuration);
+
+    // Cleanup
+    await this.cleanup();
+  }
+
+  async cleanup() {
+    console.log('');
+    console.log('='.repeat(60));
+    console.log('Test Complete - Collecting Metrics');
+    console.log('='.repeat(60));
+
+    this.running = false;
+
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+    }
+
+    // Collect metrics
+    const metrics = this.clients.map(client => client.getMetrics());
+    
+    // Print summary
+    console.log('');
+    console.log('TEST SUMMARY:');
+    console.log('-'.repeat(60));
+    console.log(`Total Clients Launched: ${this.clients.length}`);
+    console.log(`Models Successfully Placed: ${metrics.filter(m => m.modelPlaced).length}/${this.clients.length}`);
+    console.log(`Total Errors: ${metrics.reduce((sum, m) => sum + m.errors.length, 0)}`);
+    
+    // Average placement time
+    const placementTimes = metrics
+      .filter(m => m.placementTime !== null)
+      .map(m => m.placementTime);
+    
+    if (placementTimes.length > 0) {
+      const avgPlacementTime = placementTimes.reduce((a, b) => a + b, 0) / placementTimes.length;
+      const minPlacementTime = Math.min(...placementTimes);
+      const maxPlacementTime = Math.max(...placementTimes);
+      
+      console.log(`Average Placement Time: ${avgPlacementTime.toFixed(2)}ms`);
+      console.log(`Min/Max Placement Time: ${minPlacementTime}ms / ${maxPlacementTime}ms`);
+    }
+
+    // Success rate
+    const successRate = (metrics.filter(m => m.modelPlaced).length / this.clients.length * 100).toFixed(1);
+    console.log(`Success Rate: ${successRate}%`);
+
+    // Detailed client metrics
+    console.log('');
+    console.log('DETAILED CLIENT METRICS:');
+    console.log('-'.repeat(60));
+    metrics.forEach(m => {
+      console.log(`Client ${m.clientId}:`);
+      console.log(`  Model: ${m.modelFile}`);
+      console.log(`  Placed: ${m.modelPlaced ? '✓' : '✗'}`);
+      console.log(`  Total Time: ${m.totalTime}ms`);
+      if (m.placementTime) {
+        console.log(`  Placement Time: ${m.placementTime}ms`);
+      }
+      if (m.errors.length > 0) {
+        console.log(`  Errors: ${m.errors.length}`);
+        m.errors.forEach(err => console.log(`    - ${err}`));
+      }
+      console.log('');
+    });
+
+    // Cleanup all clients
+    console.log('Closing all browser instances...');
+    for (const client of this.clients) {
+      await client.cleanup();
+    }
+
+    console.log('');
+    console.log('='.repeat(60));
+    console.log('Load Test Finished');
+    console.log('='.repeat(60));
+  }
+
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+// Run the load test
+(async () => {
+  try {
+    const runner = new LoadTestRunner(CONFIG);
+    await runner.run();
+    process.exit(0);
+  } catch (error) {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  }
+})();

@@ -330,6 +330,9 @@ async function generateModelFromPrompt(prompt: string): Promise<string> {
 function createScene(): {scene: Scene, shadowGenerator: ShadowGenerator} {
 const scene = new Scene(engine);
 
+(window as any).SceneLoader = SceneLoader;
+(window as any).Vector3 = Vector3;
+(window as any).scene = scene;
 
 // Lighting
 const light = new DirectionalLight("dirLight", new Vector3(0, -1, 1), scene);
@@ -562,6 +565,7 @@ camera.keysRight.push(68); // D
       }
     }
   }
+  (window as any).loadAndPlaceModel = loadAndPlaceModel;
 
   window.addEventListener("click", () => {
     if (previewCube.isVisible && document.pointerLockElement === canvas) {
