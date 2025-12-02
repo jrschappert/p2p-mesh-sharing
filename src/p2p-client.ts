@@ -468,6 +468,8 @@ export class P2PClient {
     }
   }
 
+  
+
   async downloadModel(modelId: string, metadata: ModelPackage): Promise<void> {
     if (this.swarmManager?.getSwarms().has(modelId)) {
       logger.debug(`Already downloading ${modelId}`);
@@ -526,8 +528,3 @@ export class P2PClient {
 
 export default P2PClient;
 
-if (typeof window !== "undefined") {
-  (window as any).sendTestMesh = () => {
-    window.p2pClientInstance?.sendTestMesh();
-  };
-}

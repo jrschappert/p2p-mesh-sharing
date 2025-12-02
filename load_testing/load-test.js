@@ -117,50 +117,91 @@ class LoadTestClient {
     try {
       const success = await this.page.evaluate(async (modelFile, clientId) => {
         try {
+          // Ensure the page has the exposed APIs
           if (!window.scene || !window.SceneLoader || !window.Vector3) {
-            console.error(`Client ${clientId}: Required Babylon APIs missing`);
+            console.error(`Client ${clientId}: Required Babylon APIs (scene/SceneLoader/Vector3) missing`);
             return false;
           }
 
-          // Build model URL
+          // Resolve model URL
           const modelUrl = new URL(`models/${modelFile}`, window.location.href).href;
 
-          // Choose random X/Z in [-5, 5]     → 10x10 square
+          // Pick a random X/Z in [-5, 5] (10x10 square)
           const x = (Math.random() * 10) - 5;
           const z = (Math.random() * 10) - 5;
 
-          console.log(`Client ${clientId}: Loading model at (${x.toFixed(2)}, 0, ${z.toFixed(2)})`);
+          // Random rotation around Y
+          const rotationAngle = Math.random() * Math.PI * 2;
 
-          // Load model using ImportMeshAsync (cleanest)
-          const result = await window.SceneLoader.ImportMeshAsync(
-            "",         // mesh name(s) filter
-            "",         // root path (unused when full URL given)
-            modelUrl,   // file
-            window.scene
-          );
+          console.log(`Client ${clientId}: Importing ${modelUrl} at (${x.toFixed(2)}, ?, ${z.toFixed(2)})`);
+
+          // Load the model using ImportMeshAsync for a promise-based API
+          const result = await window.SceneLoader.ImportMeshAsync("", "", modelUrl, window.scene);
 
           if (!result || !result.meshes || result.meshes.length === 0) {
-            console.error(`Client ${clientId}: No meshes returned for model`);
+            console.error(`Client ${clientId}: No meshes returned for model ${modelFile}`);
             return false;
           }
 
-          const mesh = result.meshes[0];
+          // Choose the top-level root mesh if available
+          let rootMesh = result.meshes[0];
+          for (let m of result.meshes) {
+            if (!m.parent) { rootMesh = m; break; }
+          }
 
-          // Place the model
-          mesh.position = new window.Vector3(x, 0, z);
-          mesh.rotation = mesh.rotation || new window.Vector3(0, 0, 0);
-          mesh.rotation.y = Math.random() * Math.PI * 2;
+          // Determine Y: prefer rootMesh position.y, else 0 (you can adjust to sample ground)
+          const y = (rootMesh.position && typeof rootMesh.position.y === 'number') ? rootMesh.position.y : 0;
 
-          console.log(`Client ${clientId}: Model placed successfully`);
+          // Apply transform: position, rotation, scaling
+          rootMesh.position = new window.Vector3(x, y, z);
+          rootMesh.rotation = rootMesh.rotation || new window.Vector3(0, 0, 0);
+          rootMesh.rotation.y = rotationAngle;
+          if (!rootMesh.scaling) rootMesh.scaling = new window.Vector3(1, 1, 1);
+
+          console.log(`Client ${clientId}: Model placed locally at (${x.toFixed(2)}, ${y}, ${z.toFixed(2)})`);
+
+          // ------- SHARE WITH PEERS (the requested code) -------
+          const scale = (rootMesh.scaling && typeof rootMesh.scaling.x === 'number') ? rootMesh.scaling.x : 1;
+          const prompt = `LoadTest-${clientId}-${modelFile}`;
+          if (window.logger && typeof window.logger.info === 'function') {
+            window.logger.info('Sharing model with peers...');
+          } else {
+            console.log(`Client ${clientId}: Sharing model with peers...`);
+          }
+          if (window.p2pClient && typeof window.p2pClient.shareModel === 'function') {
+            try {
+              await window.p2pClient.shareModel(
+                modelUrl,
+                new window.Vector3(x, 1, z),
+                new window.Vector3(0, rotationAngle, 0),
+                new window.Vector3(scale, scale, scale),
+                prompt
+              );
+
+              if (window.logger && typeof window.logger.info === 'function') {
+                window.logger.info('Model shared with peers');
+              } else {
+                console.log(`Client ${clientId}: Model shared with peers`);
+              }
+            } catch (shareErr) {
+              // Log sharing failures but do not mark placement as failed (change if you want differently)
+              console.error(`Client ${clientId}: Error sharing model with peers:`, shareErr);
+            }
+          } else {
+            console.log(`Client ${clientId}: window.p2pClient.shareModel not available — skipping share`);
+          }
+          // ------------------------------------------------------
+
           return true;
-
         } catch (err) {
           console.error(`Client ${clientId}: Exception during placement`, err);
           return false;
         }
       }, this.modelFile, this.id);
 
-      // Finish timing
+      // Allow a short time for scene update / rendering
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       this.metrics.modelPlacementEnd = Date.now();
       this.modelPlaced = success;
 
@@ -174,10 +215,11 @@ class LoadTestClient {
       }
 
     } catch (error) {
-      console.error(`[Client ${this.id}] Model placement error: ${error.message}`);
+      console.error(`[Client ${this.id}] Model placement error:`, error.message);
       this.metrics.errors.push(error.message);
     }
   }
+
 
 
   async monitorScene() {
