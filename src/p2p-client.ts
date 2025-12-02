@@ -503,6 +503,31 @@ export class P2PClient {
     this.ws?.close();
     logger.info('Disconnected from all peers and tracker');
   }
+
+  public async sendTestMesh(): Promise<void> {
+    console.log("[TEST] Sending mesh from puppeteer...");
+    // Place at a random position within (-10, 1, -10) to (10, 1, 10)
+    const x = Math.random() * 20 - 10;
+    const y = 1;
+    const z = Math.random() * 20 - 10;
+    const position = new Vector3(x, y, z);
+    const rotation = new Vector3(0, 0, 0);
+    const scale = new Vector3(1, 1, 1);
+    const modelUrl = "public/models/test_model_1.glb";
+    try {
+      await this.shareModel(modelUrl, position, rotation, scale, "Test mesh from puppeteer");
+      console.log(`[TEST] Mesh shared at (${x.toFixed(2)}, ${y}, ${z.toFixed(2)})`);
+    } catch (error) {
+      console.error("[TEST] Failed to share mesh:", error);
+    }
+  }
+
 }
 
 export default P2PClient;
+
+if (typeof window !== "undefined") {
+  (window as any).sendTestMesh = () => {
+    window.p2pClientInstance?.sendTestMesh();
+  };
+}

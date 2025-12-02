@@ -24,6 +24,7 @@
     "@fal-ai/client": "^1.7.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "puppeteer": "^24.31.0",
     "ws": "^8.18.3"
   },
   "description": "This project uses Babylon.js and FAL (Flux + Trellis) to generate and place AI-made 3D models in a scene. Follow these steps to get it running locally.",
