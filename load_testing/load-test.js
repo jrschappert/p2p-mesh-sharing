@@ -5,7 +5,7 @@ const CONFIG = {
   numClients: 6,
   delayBetweenClients: 50,
   modelPlacementDelay: 100,
-  testDuration: 60000,
+  testDuration: 30000,
   headless: true,
   viewport: { width: 800, height: 600 },
 };
@@ -40,7 +40,18 @@ class LoadTestClient {
     
     try {
       this.browser = await puppeteer.launch({ 
-        headless: CONFIG.headless 
+        headless: CONFIG.headless,
+        args: [
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--mute-audio',
+        '--no-first-run'
+        ]
       });
 
       this.page = await this.browser.newPage();
@@ -424,38 +435,6 @@ class LoadTestRunner {
           shareTime: m.shareTime || null
         });
       }
-    }
-
-    console.log('');
-    console.log('PER-MODEL RECEIVE LATENCIES:');
-    console.log('-'.repeat(60));
-    
-    for (const sm of sharedModels) {
-      console.log(`Model: ${sm.modelFile} (origin client ${sm.originClient}) sharedAt=${new Date(sm.sharedAt).toISOString()}`);
-      
-      for (const receiver of this.clients) {
-        if (receiver.id === sm.originClient) continue;
-        
-        const rec = clientReceivedMaps[receiver.id] && clientReceivedMaps[receiver.id].received;
-        if (!rec || rec.length === 0) {
-          console.log(`  -> Client ${receiver.id} did NOT receive`);
-          continue;
-        }
-
-        let match = rec.find(r => 
-          (r.modelFile && r.modelFile.indexOf(sm.modelFile) !== -1) ||
-          (r.prompt && sm.prompt && r.prompt.indexOf(sm.prompt) !== -1) ||
-          (r.meshName && r.meshName.indexOf(`loadtest-${sm.originClient}`) !== -1)
-        );
-
-        if (match) {
-          const latency = (sm.sharedAt && match.ts) ? (match.ts - sm.sharedAt) : null;
-          console.log(`  -> Client ${receiver.id} received at ${new Date(match.ts).toISOString()} (latency ${latency} ms)`);
-        } else {
-          console.log(`  -> Client ${receiver.id} did NOT receive`);
-        }
-      }
-      console.log('');
     }
 
     console.log('');
