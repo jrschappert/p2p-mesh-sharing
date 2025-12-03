@@ -40,7 +40,6 @@ export class WebRTCHandler {
   private readonly MAX_PEERS = P2P_CONFIG.MAX_PEERS;
   private disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 
-  // Callbacks to communicate with P2PClient
   public onPeerConnected: (peerId: string) => void = () => {};
   public onPeerDisconnected: (peerId: string) => void = () => {};
   public onDataChannelMessage: (peerId: string, data: any) => void = () => {};
@@ -84,7 +83,6 @@ export class WebRTCHandler {
 
     const candidateTypes = new Set<string>();
 
-    // ICE candidate handler
     pc.onicecandidate = (event) => {
       if (event.candidate && this.ws) {
         const candidateType = event.candidate.type || 'unknown';
@@ -118,7 +116,6 @@ export class WebRTCHandler {
       }
     };
 
-    // ICE connection state monitoring with restart capability
     pc.oniceconnectionstatechange = async () => {
       logger.debug(`ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
       
@@ -127,7 +124,6 @@ export class WebRTCHandler {
       } else if (pc.iceConnectionState === 'failed') {
         logger.warn(`ICE connection failed for ${peerId}, attempting ICE restart...`);
         
-        // Attempt ICE restart instead of immediately disconnecting
         try {
           if (peer.isInitiator && this.ws && this.ws.readyState === WebSocket.OPEN) {
             const offer = await pc.createOffer({ iceRestart: true });
@@ -147,16 +143,13 @@ export class WebRTCHandler {
       }
     };
 
-    // ICE gathering state monitoring
     pc.onicegatheringstatechange = () => {
       logger.debug(`ICE gathering state for ${peerId}: ${pc.iceGatheringState}`);
     };
 
-    // Connection state handler with centralized timeout management
     pc.onconnectionstatechange = () => {
       logger.debug(`Connection state for ${peerId}: ${pc.connectionState}`);
       
-      // Clear any existing timeout for this peer
       const existingTimeout = this.disconnectTimeouts.get(peerId);
       if (existingTimeout) {
         clearTimeout(existingTimeout);
@@ -181,7 +174,6 @@ export class WebRTCHandler {
       } else if (pc.connectionState === 'failed') {
         logger.error(`Peer ${peerId} connection failed`);
         
-        // Give ICE restart a chance
         const timeout = setTimeout(() => {
           if (pc.connectionState === 'failed') {
             logger.info(`Peer ${peerId} still failed after ICE restart attempt, cleaning up`);
@@ -198,7 +190,6 @@ export class WebRTCHandler {
     };
 
     if (isInitiator) {
-      // Initiator creates the data channel
       logger.debug(`Creating data channel for ${peerId} (initiator)`);
       const dataChannel = pc.createDataChannel('bittorrent', {
         ordered: true,
@@ -207,7 +198,6 @@ export class WebRTCHandler {
       this.setupDataChannel(peerId, dataChannel);
       peer.dataChannel = dataChannel;
 
-      // Create and send offer
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -226,7 +216,6 @@ export class WebRTCHandler {
         return null;
       }
     } else {
-      // Answerer receives data channel via ondatachannel event
       logger.debug(`Waiting for data channel from ${peerId} (answerer)`);
       pc.ondatachannel = (event) => {
         logger.debug(`Received data channel from ${peerId}`);
@@ -243,7 +232,6 @@ export class WebRTCHandler {
     logger.debug(`Setting up data channel for ${peerId} (current state: ${channel.readyState})`);
     channel.binaryType = 'arraybuffer';
 
-    // Track state changes
     let openTimestamp: number | null = null;
 
     channel.onopen = () => {
@@ -269,7 +257,6 @@ export class WebRTCHandler {
       logger.debug(`Data channel CLOSED with ${peerId}`);
     };
 
-    // If channel is already open, trigger the callback immediately
     if (channel.readyState === 'open') {
       logger.debug(`Data channel already open with ${peerId}, triggering callback immediately`);
       openTimestamp = Date.now();
@@ -335,7 +322,6 @@ export class WebRTCHandler {
   }
 
   public handlePeerDisconnect(peerId: string): void {
-    // Clear any pending timeout
     const timeout = this.disconnectTimeouts.get(peerId);
     if (timeout) {
       clearTimeout(timeout);
@@ -355,7 +341,6 @@ export class WebRTCHandler {
   public disconnectAll(): void {
     logger.info(`Disconnecting all ${this.peers.size} peers`);
     
-    // Clear all timeouts
     this.disconnectTimeouts.forEach(timeout => clearTimeout(timeout));
     this.disconnectTimeouts.clear();
     

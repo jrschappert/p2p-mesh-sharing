@@ -3,9 +3,8 @@
  */
 
 export const P2P_CONFIG = {
-  // Connection limits
   MAX_PEERS: 50,
-  REQUEST_TIMEOUT: 30000, // 30 second timeout for chunk requests
+  REQUEST_TIMEOUT: 30000,
   DISCONNECT_GRACE_PERIOD: 10000,
   ICE_RESTART_GRACE_PERIOD: 5000,
   PEER_STATUS_UPDATE_INTERVAL: 2000,
@@ -13,7 +12,7 @@ export const P2P_CONFIG = {
   CONNECTION_REQUEST_DELAY: 1000,
   
   // Data transfer
-  CHUNK_SIZE: 16 * 1024, // 15KB chunks (under WebRTC 16KB limit)
+  CHUNK_SIZE: 16 * 1024,
   CHUNKS_PER_REQUEST: 5,
   
   // WebRTC configuration

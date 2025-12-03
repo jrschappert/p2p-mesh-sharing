@@ -67,17 +67,13 @@ export class SwarmManager {
 
     logger.swarm(`Chunk ${chunkIndex}/${swarm.totalChunks} from ${peerId} (${Math.round(swarm.ownChunks.size / swarm.totalChunks * 100)}%)`);
 
-    // Action: broadcast have
     actions.push({ type: 'broadcast_have', modelId, chunkIndex });
 
-    // Action: report progress
     const progress = swarm.ownChunks.size / swarm.totalChunks * 100;
     actions.push({ type: 'download_progress', modelId, progress });
 
-    // Check for timed out requests (event-driven timeout checking)
     this.checkTimeouts(swarm);
 
-    // Action: download complete or request more
     if (swarm.ownChunks.size === swarm.totalChunks) {
       actions.push({ type: 'download_complete', modelId });
     } else {
@@ -95,8 +91,6 @@ export class SwarmManager {
     const timeoutsToRemove: number[] = [];
     
     swarm.requestedChunks.forEach((peerId, chunkIndex) => {
-      // Use swarm start time as a proxy for request time
-      // If a chunk has been requested for longer than REQUEST_TIMEOUT, clear it
       if (swarm.startTime && now - swarm.startTime > this.REQUEST_TIMEOUT) {
         timeoutsToRemove.push(chunkIndex);
       }
@@ -123,7 +117,6 @@ export class SwarmManager {
 
     if (needed.length === 0) return actions;
 
-    // Calculate rarity for each needed chunk
     const rarity = new Map<number, number>();
     needed.forEach(chunkIdx => {
       let count = 0;
@@ -136,10 +129,8 @@ export class SwarmManager {
       rarity.set(chunkIdx, count);
     });
 
-    // Sort by rarity (rarest first)
     needed.sort((a, b) => (rarity.get(a) || 0) - (rarity.get(b) || 0));
 
-    // Generate request actions for each peer
     peerBitfields.forEach((bitfields, peerId) => {
       const bitfield = bitfields.get(modelId);
       if (!bitfield) return;

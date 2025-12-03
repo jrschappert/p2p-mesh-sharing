@@ -1,22 +1,17 @@
-// loadTest.js - Load testing script for p2p-mesh-sharing
 // Run with: node loadTest.js
 
 import puppeteer from 'puppeteer';
 
-// ============================================================
-// CONFIGURATION - Modify these parameters as needed
-// ============================================================
 const CONFIG = {
   baseUrl: 'http://localhost:5173',
-  numClients: 2,                    // Number of simultaneous clients
-  delayBetweenClients: 2000,        // ms delay between launching clients
-  modelPlacementDelay: 5000,        // ms to wait before placing model
-  testDuration: 60000,              // Total test duration in ms
-  headless: false,                  // Set to true for headless mode
+  numClients: 2,
+  delayBetweenClients: 2000, 
+  modelPlacementDelay: 5000,
+  testDuration: 60000,
+  headless: false,
   viewport: { width: 800, height: 600 },
 };
 
-// Test models - these should exist in public/models/
 const TEST_MODELS = [
   'test_model_1.glb',
   'test_model_2.glb',
@@ -41,7 +36,6 @@ class LoadTestClient {
     console.log(`[Client ${this.id}] Launching browser...`);
     
     try {
-      // Simple browser launch like the working example
       this.browser = await puppeteer.launch({ 
         headless: CONFIG.headless 
       });
@@ -49,7 +43,6 @@ class LoadTestClient {
       this.page = await this.browser.newPage();
       await this.page.setViewport(CONFIG.viewport);
 
-      // Monitor console messages
       this.page.on('console', msg => {
         const text = msg.text();
         if (!text.includes('Download the Vue Devtools') && !text.includes('[vite]')) {
@@ -57,7 +50,6 @@ class LoadTestClient {
         }
       });
 
-      // Monitor errors
       this.page.on('pageerror', error => {
         console.error(`[Client ${this.id}] Page Error:`, error.message);
         this.metrics.errors.push(error.message);
@@ -65,15 +57,12 @@ class LoadTestClient {
 
       this.metrics.startTime = Date.now();
       
-      // Simple navigation like the working example
       await this.page.goto(CONFIG.baseUrl);
       
       console.log(`[Client ${this.id}] Page loaded successfully`);
       
-      // Wait longer for the page to fully initialize
       await new Promise(resolve => setTimeout(resolve, 5000));
       
-      // Check if everything loaded
       const diagnostics = await this.page.evaluate(() => {
         const canvas = document.getElementById('renderCanvas');
         const gl = canvas ? (canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) : null;
@@ -89,7 +78,6 @@ class LoadTestClient {
 
       console.log(`[Client ${this.id}] Diagnostics:`, diagnostics);
 
-      // Scene is ready - that's what matters most
       if (!diagnostics.hasScene) {
         console.error(`[Client ${this.id}] Scene not available`);
         this.metrics.errors.push('Scene not available');
@@ -117,13 +105,11 @@ class LoadTestClient {
     try {
       const success = await this.page.evaluate(async (modelFile, clientId) => {
         try {
-          // Ensure the page has the exposed APIs
           if (!window.scene || !window.SceneLoader || !window.Vector3) {
             console.error(`Client ${clientId}: Required Babylon APIs (scene/SceneLoader/Vector3) missing`);
             return false;
           }
 
-          // Resolve model URL
           const modelUrl = new URL(`models/${modelFile}`, window.location.href).href;
 
           // Pick a random X/Z in [-5, 5] (10x10 square)
@@ -135,7 +121,6 @@ class LoadTestClient {
 
           console.log(`Client ${clientId}: Importing ${modelUrl} at (${x.toFixed(2)}, ?, ${z.toFixed(2)})`);
 
-          // Load the model using ImportMeshAsync for a promise-based API
           const result = await window.SceneLoader.ImportMeshAsync("", "", modelUrl, window.scene);
 
           if (!result || !result.meshes || result.meshes.length === 0) {
@@ -143,16 +128,13 @@ class LoadTestClient {
             return false;
           }
 
-          // Choose the top-level root mesh if available
           let rootMesh = result.meshes[0];
           for (let m of result.meshes) {
             if (!m.parent) { rootMesh = m; break; }
           }
 
-          // Determine Y: prefer rootMesh position.y, else 0 (you can adjust to sample ground)
           const y = (rootMesh.position && typeof rootMesh.position.y === 'number') ? rootMesh.position.y : 0;
 
-          // Apply transform: position, rotation, scaling
           rootMesh.position = new window.Vector3(x, y, z);
           rootMesh.rotation = rootMesh.rotation || new window.Vector3(0, 0, 0);
           rootMesh.rotation.y = rotationAngle;
@@ -160,7 +142,6 @@ class LoadTestClient {
 
           console.log(`Client ${clientId}: Model placed locally at (${x.toFixed(2)}, ${y}, ${z.toFixed(2)})`);
 
-          // ------- SHARE WITH PEERS (the requested code) -------
           const scale = (rootMesh.scaling && typeof rootMesh.scaling.x === 'number') ? rootMesh.scaling.x : 1;
           const prompt = `LoadTest-${clientId}-${modelFile}`;
           if (window.logger && typeof window.logger.info === 'function') {
@@ -184,13 +165,11 @@ class LoadTestClient {
                 console.log(`Client ${clientId}: Model shared with peers`);
               }
             } catch (shareErr) {
-              // Log sharing failures but do not mark placement as failed (change if you want differently)
               console.error(`Client ${clientId}: Error sharing model with peers:`, shareErr);
             }
           } else {
             console.log(`Client ${clientId}: window.p2pClient.shareModel not available — skipping share`);
           }
-          // ------------------------------------------------------
 
           return true;
         } catch (err) {
@@ -199,7 +178,6 @@ class LoadTestClient {
         }
       }, this.modelFile, this.id);
 
-      // Allow a short time for scene update / rendering
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       this.metrics.modelPlacementEnd = Date.now();
@@ -231,7 +209,6 @@ class LoadTestClient {
           cameraPosition: null
         };
 
-        // Try to get Babylon.js scene data
         if (window.scene) {
           data.meshCount = window.scene.meshes ? window.scene.meshes.length : 0;
           if (window.scene.activeCamera) {
@@ -243,7 +220,6 @@ class LoadTestClient {
           }
         }
 
-        // Try to get peer connection data
         if (window.peerConnections) {
           data.peerCount = Object.keys(window.peerConnections).length;
         } else if (window.peers) {
@@ -256,7 +232,6 @@ class LoadTestClient {
       console.log(`[Client ${this.id}] Scene - Meshes: ${sceneData.meshCount}, Peers: ${sceneData.peerCount}`);
       return sceneData;
     } catch (error) {
-      // Silently fail monitoring to avoid spam
       return null;
     }
   }
@@ -304,7 +279,6 @@ class LoadTestRunner {
 
     this.running = true;
 
-    // Launch clients with staggered delays
     for (let i = 0; i < this.config.numClients; i++) {
       const client = new LoadTestClient(i);
       this.clients.push(client);
@@ -312,14 +286,12 @@ class LoadTestRunner {
       const success = await client.launch();
       
       if (success) {
-        // Wait before placing model
         setTimeout(() => {
           if (this.running) {
             client.placeTestModel();
           }
         }, this.config.modelPlacementDelay);
 
-        // Monitor scene periodically (every 15 seconds)
         setInterval(() => {
           if (this.running) {
             client.monitorScene();
@@ -327,7 +299,6 @@ class LoadTestRunner {
         }, 15000);
       }
 
-      // Delay before launching next client
       if (i < this.config.numClients - 1) {
         await this.delay(this.config.delayBetweenClients);
       }
@@ -337,10 +308,8 @@ class LoadTestRunner {
     console.log(`All ${this.clients.length} clients launched. Test running...`);
     console.log('');
 
-    // Run for specified duration
     await this.delay(this.config.testDuration);
 
-    // Cleanup
     await this.cleanup();
   }
 
@@ -356,10 +325,8 @@ class LoadTestRunner {
       clearInterval(this.monitoringInterval);
     }
 
-    // Collect metrics
     const metrics = this.clients.map(client => client.getMetrics());
     
-    // Print summary
     console.log('');
     console.log('TEST SUMMARY:');
     console.log('-'.repeat(60));
@@ -367,7 +334,6 @@ class LoadTestRunner {
     console.log(`Models Successfully Placed: ${metrics.filter(m => m.modelPlaced).length}/${this.clients.length}`);
     console.log(`Total Errors: ${metrics.reduce((sum, m) => sum + m.errors.length, 0)}`);
     
-    // Average placement time
     const placementTimes = metrics
       .filter(m => m.placementTime !== null)
       .map(m => m.placementTime);
@@ -381,11 +347,9 @@ class LoadTestRunner {
       console.log(`Min/Max Placement Time: ${minPlacementTime}ms / ${maxPlacementTime}ms`);
     }
 
-    // Success rate
     const successRate = (metrics.filter(m => m.modelPlaced).length / this.clients.length * 100).toFixed(1);
     console.log(`Success Rate: ${successRate}%`);
 
-    // Detailed client metrics
     console.log('');
     console.log('DETAILED CLIENT METRICS:');
     console.log('-'.repeat(60));
@@ -404,7 +368,6 @@ class LoadTestRunner {
       console.log('');
     });
 
-    // Cleanup all clients
     console.log('Closing all browser instances...');
     for (const client of this.clients) {
       await client.cleanup();
@@ -421,7 +384,6 @@ class LoadTestRunner {
   }
 }
 
-// Run the load test
 (async () => {
   try {
     const runner = new LoadTestRunner(CONFIG);

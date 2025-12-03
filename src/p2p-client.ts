@@ -13,11 +13,7 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { ShadowGenerator } from '@babylonjs/core';
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
-import { privateDecrypt } from 'crypto';
 
-/**
- * BitTorrent-inspired P2P client for 3D model sharing. This class is the main coordinator.
- */
 export class P2PClient {
   private ws: WebSocket | null = null;
   private clientId: string | null = null;
@@ -29,7 +25,6 @@ export class P2PClient {
   // Track which peers have received metadata for each model
   private metadataSentTo = new Map<string, Set<string>>(); // modelId -> Set<peerId>
   
-  // Callbacks
   private onPeerConnected?: (peerId: string) => void;
   private onPeerDisconnected?: (peerId: string) => void;
   private onModelReceived?: (modelPackage: ModelPackage) => void;
@@ -42,7 +37,6 @@ export class P2PClient {
     this.connectToTracker(url);
     this.shadowGenerator = shadowGenerator;
     
-    // Handle tab/window close to properly disconnect
     window.addEventListener('beforeunload', () => {
       this.disconnect();
     });
@@ -58,7 +52,6 @@ export class P2PClient {
       this.swarmManager = new SwarmManager();
       this.setupWebRTCHandlerCallbacks();
       
-      // Delay connection request to ensure everything is ready
       setTimeout(() => {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'request-connection' }));
@@ -123,7 +116,6 @@ export class P2PClient {
     
     this.webRTCHandler.onPeerDisconnected = (peerId) => {
       logger.p2p(`Peer disconnected: ${peerId}`);
-      // Clear metadata tracking for this peer
       this.metadataSentTo.forEach(peerSet => peerSet.delete(peerId));
       this.onPeerDisconnected?.(peerId);
     };
@@ -132,7 +124,6 @@ export class P2PClient {
     
     this.webRTCHandler.onDataChannelOpen = (peerId) => {
       logger.p2p(`Data channel OPEN with ${peerId} - sending metadata`);
-      // Send metadata once when channel opens
       this.sendAllMetadata(peerId);
     };
   }
@@ -192,7 +183,6 @@ export class P2PClient {
     
     logger.p2p(`Swarm update for ${modelId}: ${peers.length} peers available`);
     
-    // Connect to new peers we're not connected to yet
     const currentPeerCount = this.webRTCHandler?.getAllPeers().size || 0;
     const peersToConnect = peers
       .filter(p => p.id !== this.clientId && !this.webRTCHandler?.getPeer(p.id))
@@ -224,7 +214,6 @@ export class P2PClient {
   
   /**
    * Send metadata and bitfield to a specific peer
-   * Extracted to avoid duplication between sendAllMetadata and shareModel
    */
   private sendMetadataToPeer(peerId: string, modelId: string, metadata: ModelPackage, bitfield: Uint8Array): boolean {
     const peer = this.webRTCHandler?.getPeer(peerId);
@@ -233,7 +222,6 @@ export class P2PClient {
       return false;
     }
     
-    // Check if already sent
     let peerSet = this.metadataSentTo.get(modelId);
     if (!peerSet) {
       peerSet = new Set();
@@ -257,7 +245,6 @@ export class P2PClient {
         bitfield: Array.from(bitfield)
       }));
       
-      // Mark as sent to this peer
       peerSet.add(peerId);
       logger.debug(`Sent metadata for ${modelId} to ${peerId}`);
       return true;
@@ -394,7 +381,6 @@ export class P2PClient {
     });
   }
 
-  // Helper methods to extract peer data for SwarmManager
   private getPeerBitfields(): Map<string, Map<string, Uint8Array>> {
     const bitfields = new Map<string, Map<string, Uint8Array>>();
     this.webRTCHandler?.getAllPeers().forEach((peer, peerId) => {
@@ -411,7 +397,6 @@ export class P2PClient {
     
     logger.info(`Download complete for ${modelId}!`);
     
-    // Clean up metadata tracking for completed downloads
     this.metadataSentTo.delete(modelId);
     
     const sortedChunks = Array.from(swarm.receivedChunks.values()).sort((a, b) => a.index - b.index);
@@ -450,10 +435,8 @@ export class P2PClient {
       
       logger.info(`Sharing ${modelId} (${chunks.length} chunks)`);
       
-      // Announce to tracker first
       this.announceToTracker(modelId, true);
       
-      // Send to all connected peers using the extracted method
       let sentTo = 0;
       const bitfield = Utils.createBitfield(swarm.ownChunks, swarm.totalChunks);
       this.webRTCHandler?.getAllPeers().forEach((peer) => {
@@ -490,7 +473,6 @@ export class P2PClient {
     }
   }
 
-  // Public API
   public setOnPeerConnected = (cb: (peerId: string) => void) => this.onPeerConnected = cb;
   public setOnPeerDisconnected = (cb: (peerId: string) => void) => this.onPeerDisconnected = cb;
   public setOnModelReceived = (cb: (modelPackage: ModelPackage) => void) => this.onModelReceived = cb;
@@ -498,7 +480,6 @@ export class P2PClient {
   public getConnectedPeers = (): string[] => Array.from(this.webRTCHandler?.getAllPeers().keys() || []);
 
   public disconnect(): void {
-    // Clear metadata tracking
     this.metadataSentTo.clear();
     
     this.webRTCHandler?.disconnectAll();

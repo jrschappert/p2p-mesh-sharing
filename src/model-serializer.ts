@@ -51,7 +51,6 @@ export class ModelSerializer {
     scale: Vector3,
     metadata: Partial<ModelPackage["metadata"]>
   ): Promise<{ package: ModelPackage; chunks: ModelChunk[] }> {
-    // Fetch the GLB file
     const response = await fetch(modelUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch model: ${response.statusText}`);
@@ -60,10 +59,8 @@ export class ModelSerializer {
     const arrayBuffer = await response.arrayBuffer();
     const modelData = new Uint8Array(arrayBuffer);
 
-    // Generate unique ID for this model
     const modelId = this.generateModelId();
 
-    // Create the metadata package
     const totalChunks = Math.ceil(modelData.byteLength / this.CHUNK_SIZE);
     const modelPackage: ModelPackage = {
       id: modelId,
@@ -79,7 +76,6 @@ export class ModelSerializer {
       },
     };
 
-    // Split into chunks
     const chunks = this.createChunks(modelId, modelData, totalChunks);
 
     return { package: modelPackage, chunks };
@@ -152,16 +148,13 @@ export class ModelSerializer {
    * Creates a Blob URL from model chunks (for loading into Babylon.js)
    */
   static createBlobFromChunks(chunks: ModelChunk[]): string {
-    // Sort chunks by index to ensure correct order
     const sortedChunks = [...chunks].sort((a, b) => a.index - b.index);
 
-    // Calculate total size
     const totalSize = sortedChunks.reduce(
       (sum, chunk) => sum + chunk.data.byteLength,
       0
     );
 
-    // Reassemble the data
     const reassembled = new Uint8Array(totalSize);
     let offset = 0;
 
@@ -170,7 +163,6 @@ export class ModelSerializer {
       offset += chunk.data.byteLength;
     }
 
-    // Create blob and return URL
     const blob = new Blob([reassembled], { type: "model/gltf-binary" });
     return URL.createObjectURL(blob);
   }
