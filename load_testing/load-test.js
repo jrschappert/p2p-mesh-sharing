@@ -2,7 +2,7 @@ import puppeteer from 'puppeteer';
 
 const CONFIG = {
   baseUrl: 'https://jrschappert.github.io/p2p-mesh-sharing/',
-  numClients: 6,
+  numClients: 10,
   delayBetweenClients: 50,
   modelPlacementDelay: 100,
   testDuration: 30000,
