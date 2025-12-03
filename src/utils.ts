@@ -39,7 +39,7 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   if (bytes.length < 65536) {
     return btoa(String.fromCharCode(...bytes));
   }
-  // For larger chunks, use the loop method to avoid stack overflow
+  // For larger chunks, avoid stack overflow
   let binary = '';
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -50,7 +50,7 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * Optimized Base64 to ArrayBuffer conversion
+ * Base64 to ArrayBuffer conversion
  */
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);

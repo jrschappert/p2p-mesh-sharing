@@ -226,7 +226,6 @@ function broadcastToSwarm(modelId, message, excludePeerId = null) {
   swarm.forEach((peerInfo, peerId) => {
     if (peerId === excludePeerId) return;
     
-    // Find the websocket for this peer
     for (const [ws, clientInfo] of clients.entries()) {
       if (clientInfo.id === peerId && ws.readyState === WebSocket.OPEN) {
         ws.send(messageStr);
@@ -253,7 +252,6 @@ setInterval(() => {
         console.log(`Removing stale peer ${peerId} from swarm ${modelId}`);
         swarm.delete(peerId);
         
-        // Notify swarm
         broadcastToSwarm(modelId, {
           type: 'peer-left-swarm',
           modelId,
@@ -267,7 +265,7 @@ setInterval(() => {
       console.log(`Removed empty swarm ${modelId}`);
     }
   });
-}, 60000); // Every minute
+}, 60000);
 
 /**
  * Periodic stats logging
@@ -275,7 +273,6 @@ setInterval(() => {
 setInterval(() => {
   console.log(`\n Stats: ${clients.size} peers, ${swarms.size} active swarms`);
   
-  // Log top swarms
   const topSwarms = Array.from(swarms.entries())
     .sort((a, b) => b[1].size - a[1].size)
     .slice(0, 5);
@@ -288,9 +285,6 @@ setInterval(() => {
     });
   }
   console.log('');
-}, 30000); // Every 30 seconds
+}, 30000);
 
-/**
- * Graceful shutdown
- */
 console.log(`Ready to track swarms!\n`);

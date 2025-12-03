@@ -4,7 +4,7 @@
 
 import { ModelPackage } from './model-serializer';
 
-// Tracker Messages (WebSocket)
+// Tracker Messages
 export interface WelcomeMessage {
   type: 'welcome';
   clientId: string;
@@ -31,7 +31,7 @@ export interface PeerJoinedSwarmMessage {
   modelId: string;
   peerId: string;
   complete: boolean;
-  peers: PeerInfo[]; // Same structure as announce-response for consistent handling
+  peers: PeerInfo[];
 }
 
 export interface PeerLeftSwarmMessage {
@@ -99,7 +99,7 @@ export interface PieceMessage {
   type: 'piece';
   modelId: string;
   chunkIndex: number;
-  data: string; // base64 encoded
+  data: string;
   checksum: number;
 }
 
@@ -124,7 +124,7 @@ export interface PeerInfo {
 // Server-side types
 export interface ClientInfo {
   id: string;
-  ws: any; // WebSocket type
+  ws: any;
   models: Set<string>;
 }
 

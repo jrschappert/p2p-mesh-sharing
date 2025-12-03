@@ -21,7 +21,6 @@ import { logger } from './logger';
 
 Effect.ResetCache();
 
-// Add center cursor CSS and modal styles
 const style = document.createElement('style');
 style.textContent = `
   #cursor {
@@ -144,7 +143,6 @@ const cursor = document.createElement('div');
 cursor.id = 'cursor';
 document.body.appendChild(cursor);
 
-// Setup HUD text management
 const hudElement = document.getElementById('hud') as HTMLElement;
 
 function updateHudWithP2PStatus() {
@@ -159,13 +157,11 @@ function updateHudWithP2PStatus() {
   }
 }
 
-// Listen for pointer lock changes
 document.addEventListener('pointerlockchange', () => {
   updateHudWithP2PStatus();
 });
 
 
-// Create modal for prompt input
 const overlay = document.createElement('div');
 overlay.id = 'modalOverlay';
 document.body.appendChild(overlay);
@@ -194,11 +190,9 @@ document.body.appendChild(modal);
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
 
-// FAL API Configuration
 const FAL_KEY = (import.meta as any).env.VITE_FAL_KEY || "";
 fal.config({ credentials: FAL_KEY });
 
-// Progress tracking - allow resets for retries
 let currentProgress = 0;
 let progressPhase: 'flux' | 'trellis' | 'loading' | null = null;
 
@@ -206,7 +200,6 @@ function updateProgress(percentage: number, message: string, phase?: 'flux' | 't
   const progressFill = document.getElementById('progressFill');
   const progressText = document.getElementById('progressText');
   
-  // Allow progress to reset when changing phases
   if (phase && phase !== progressPhase) {
     progressPhase = phase;
     currentProgress = percentage;
@@ -702,13 +695,10 @@ camera.keysRight.push(68); // D
 
 const {scene, shadowGenerator} = createScene();
 
-// Initialize P2P Client for multi-tab model sharing
 const p2pClient = new P2PClient(scene, shadowGenerator);
 
-// Expose to window for debugging
 (window as any).p2pClient = p2pClient;
 
-// Setup P2P callbacks
 p2pClient.setOnPeerConnected((peerId) => {
   logger.info(`Connected to peer: ${peerId}`);
   updateHudWithP2PStatus();

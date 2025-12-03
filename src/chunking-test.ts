@@ -65,8 +65,8 @@ export async function testBasicChunking() {
     { prompt: "test model", authorId: "tester" }
   );
   
-  console.log(`✓ Created ${chunks.length} chunks`);
-  console.log(`  Total size: ${modelPackage.metadata.totalSize} bytes`);
+  console.log(`Created ${chunks.length} chunks`);
+  console.log(`Total size: ${modelPackage.metadata.totalSize} bytes`);
   
   // Verify chunk integrity
   console.log("\n2. Verifying chunk integrity...");
@@ -75,7 +75,7 @@ export async function testBasicChunking() {
     if (ModelSerializer.verifyChunk(chunk)) {
       validChunks++;
     } else {
-      console.error(`✗ Chunk ${chunk.index} failed integrity check!`);
+      console.error(`Chunk ${chunk.index} failed integrity check!`);
     }
   }
   console.log(`✓ ${validChunks}/${chunks.length} chunks valid`);
@@ -83,7 +83,7 @@ export async function testBasicChunking() {
   // Reassemble
   console.log("\n3. Reassembling chunks...");
   const blobUrl = ModelSerializer.createBlobFromChunks(chunks);
-  console.log(`✓ Created blob URL: ${blobUrl}`);
+  console.log(`Created blob URL: ${blobUrl}`);
   
   // Verify the reassembled data matches original
   console.log("\n4. Verifying reassembled data...");
@@ -94,36 +94,36 @@ export async function testBasicChunking() {
   const reassembledData = new Uint8Array(await reassembledResponse.arrayBuffer());
   
   if (originalData.length === reassembledData.length) {
-    console.log(`✓ Size matches: ${originalData.length} bytes`);
+    console.log(`Size matches: ${originalData.length} bytes`);
     
     // Check a few sample bytes
     let matches = true;
     for (let i = 0; i < Math.min(100, originalData.length); i++) {
       if (originalData[i] !== reassembledData[i]) {
         matches = false;
-        console.error(`✗ Byte ${i} doesn't match: ${originalData[i]} vs ${reassembledData[i]}`);
+        console.error(`Byte ${i} doesn't match: ${originalData[i]} vs ${reassembledData[i]}`);
         break;
       }
     }
     
     if (matches) {
-      console.log("✓ Data integrity verified!");
+      console.log("Data integrity verified!");
     }
   } else {
-    console.error(`✗ Size mismatch: ${originalData.length} vs ${reassembledData.length}`);
+    console.error(`Size mismatch: ${originalData.length} vs ${reassembledData.length}`);
   }
   
   // Test position/rotation/scale preservation
   console.log("\n5. Verifying metadata...");
-  console.log(`✓ Position: (${modelPackage.position.x}, ${modelPackage.position.y}, ${modelPackage.position.z})`);
-  console.log(`✓ Rotation: (${modelPackage.rotation.x}, ${modelPackage.rotation.y}, ${modelPackage.rotation.z})`);
-  console.log(`✓ Scale: (${modelPackage.scale.x}, ${modelPackage.scale.y}, ${modelPackage.scale.z})`);
+  console.log(`Position: (${modelPackage.position.x}, ${modelPackage.position.y}, ${modelPackage.position.z})`);
+  console.log(`Rotation: (${modelPackage.rotation.x}, ${modelPackage.rotation.y}, ${modelPackage.rotation.z})`);
+  console.log(`Scale: (${modelPackage.scale.x}, ${modelPackage.scale.y}, ${modelPackage.scale.z})`);
   
   // Cleanup
   URL.revokeObjectURL(modelUrl);
   URL.revokeObjectURL(blobUrl);
   
-  console.log("\n✅ Basic chunking test PASSED\n");
+  console.log("\nBasic chunking test PASSED\n");
 }
 
 /**
@@ -149,7 +149,7 @@ export async function testRealisticModel() {
   );
   
   const chunkTime = performance.now() - startTime;
-  console.log(`✓ Chunked in ${chunkTime.toFixed(2)}ms`);
+  console.log(`Chunked in ${chunkTime.toFixed(2)}ms`);
   console.log(`  - Chunks: ${chunks.length}`);
   console.log(`  - Size: ${(modelPackage.metadata.totalSize / 1024 / 1024).toFixed(2)} MB`);
   
@@ -159,22 +159,22 @@ export async function testRealisticModel() {
   const blobUrl = ModelSerializer.createBlobFromChunks(chunks);
   const reassembleTime = performance.now() - reassembleStart;
   
-  console.log(`✓ Reassembled in ${reassembleTime.toFixed(2)}ms`);
+  console.log(`Reassembled in ${reassembleTime.toFixed(2)}ms`);
   
   // Verify size
   const response = await fetch(blobUrl);
   const data = await response.arrayBuffer();
   
   if (data.byteLength === modelPackage.metadata.totalSize) {
-    console.log("✓ Size verified!");
+    console.log("Size verified!");
   } else {
-    console.error(`✗ Size mismatch: ${data.byteLength} vs ${modelPackage.metadata.totalSize}`);
+    console.error(`Size mismatch: ${data.byteLength} vs ${modelPackage.metadata.totalSize}`);
   }
   
   URL.revokeObjectURL(modelUrl);
   URL.revokeObjectURL(blobUrl);
   
-  console.log("\n✅ Realistic model test PASSED\n");
+  console.log("\nRealistic model test PASSED\n");
 }
 
 /**
@@ -202,7 +202,7 @@ export async function testWithActualModel(modelPath: string = "models/test_model
     
     const chunkTime = performance.now() - startTime;
     
-    console.log(`✓ Chunked in ${chunkTime.toFixed(2)}ms`);
+    console.log(`Chunked in ${chunkTime.toFixed(2)}ms`);
     console.log(`  - Size: ${(modelPackage.metadata.totalSize / 1024).toFixed(2)} KB`);
     console.log(`  - Chunks: ${chunks.length}`);
     console.log(`  - Avg chunk size: ${(modelPackage.metadata.totalSize / chunks.length / 1024).toFixed(2)} KB`);
@@ -210,7 +210,7 @@ export async function testWithActualModel(modelPath: string = "models/test_model
     // Verify all chunks
     console.log("\nVerifying chunks...");
     const allValid = chunks.every(chunk => ModelSerializer.verifyChunk(chunk));
-    console.log(allValid ? "✓ All chunks valid" : "✗ Some chunks invalid");
+    console.log(allValid ? "All chunks valid" : "Some chunks invalid");
     
     // Reassemble
     console.log("\nReassembling...");
@@ -218,8 +218,8 @@ export async function testWithActualModel(modelPath: string = "models/test_model
     const blobUrl = ModelSerializer.createBlobFromChunks(chunks);
     const reassembleTime = performance.now() - reassembleStart;
     
-    console.log(`✓ Reassembled in ${reassembleTime.toFixed(2)}ms`);
-    console.log(`✓ Blob URL: ${blobUrl}`);
+    console.log(`Reassembled in ${reassembleTime.toFixed(2)}ms`);
+    console.log(`Blob URL: ${blobUrl}`);
     
     // Download the reassembled model
     console.log("\nDownloading reassembled model...");
@@ -233,17 +233,17 @@ export async function testWithActualModel(modelPath: string = "models/test_model
     downloadLink.click();
     document.body.removeChild(downloadLink);
     
-    console.log(`✓ Downloaded as: ${downloadLink.download}`);
+    console.log(`Downloaded as: ${downloadLink.download}`);
     
     // You could load this back into Babylon.js here if needed
     // const result = await SceneLoader.ImportMeshAsync("", blobUrl, "", scene);
     
     URL.revokeObjectURL(blobUrl);
     
-    console.log("\n✅ Actual model test PASSED\n");
+    console.log("\nActual model test PASSED\n");
     
   } catch (error) {
-    console.error("✗ Test failed:", error);
+    console.error("Test failed:", error);
     throw error;
   }
 }
@@ -252,7 +252,7 @@ export async function testWithActualModel(modelPath: string = "models/test_model
  * Run all local tests
  */
 export async function runAllLocalTests() {
-  console.log("🧪 Running Local Chunking Tests");
+  console.log("Running Local Chunking Tests");
   console.log("=".repeat(50));
   
   try {
@@ -263,12 +263,10 @@ export async function runAllLocalTests() {
     // await testWithActualModel("models/test_model_1.glb");
     
     console.log("=".repeat(50));
-    console.log("✅ All local tests PASSED!\n");
-    console.log("Your chunking system works correctly.");
-    console.log("Ready to integrate with WebRTC! 🚀\n");
+    console.log("All local tests PASSED!\n");
     
   } catch (error) {
-    console.error("\n❌ Tests failed:", error);
+    console.error("\nTests failed:", error);
     throw error;
   }
 }
@@ -286,16 +284,16 @@ export async function quickTest() {
     { prompt: "quick", authorId: "test" }
   );
   
-  console.log(`✓ ${chunks.length} chunks created`);
+  console.log(`${chunks.length} chunks created`);
   
   const blobUrl = ModelSerializer.createBlobFromChunks(chunks);
-  console.log(`✓ Reassembled: ${blobUrl}`);
+  console.log(`Reassembled: ${blobUrl}`);
   
   // Download it
   const response = await fetch(blobUrl);
   const blob = await response.blob();
   downloadBlob(blob, `quick_test_${Date.now()}.glb`);
-  console.log(`✓ Downloaded!`);
+  console.log(`Downloaded!`);
   
   URL.revokeObjectURL(modelUrl);
   URL.revokeObjectURL(blobUrl);

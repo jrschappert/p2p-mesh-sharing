@@ -21,17 +21,14 @@ class Logger {
     console.error(`[ERROR] ${message}`, ...args);
   }
 
-  // Specialized logging for P2P operations
   p2p(message: string, ...args: any[]): void {
     console.log(`[P2P] ${message}`, ...args);
   }
 
-  // Specialized logging for WebRTC operations
   webrtc(message: string, ...args: any[]): void {
     console.log(`[WebRTC] ${message}`, ...args);
   }
 
-  // Specialized logging for swarm operations
   swarm(message: string, ...args: any[]): void {
     console.log(`[Swarm] ${message}`, ...args);
   }
