@@ -1,8 +1,6 @@
-# P2P Generative 3D Mesh Sharing
+# Developer Setup Guide
 
-This project uses a P2P network to share 3D meshes between peers in an effort to offere a more scalable and cost-effective way to share user-generated assets among many users.
-
-View the deployed project here: 
+This project uses Babylon.js and FAL (Flux + Trellis) to generate and place AI-made 3D models in a scene and then it shares them with peers using WebRTC. Follow these steps to get it running locally.
 
 ---
 
@@ -126,7 +124,3 @@ Click the ground to open the modal → type a prompt → generate a model, or us
 
 * **`src/main.ts`** — contains all Babylon.js client logic (scene setup, lighting, camera, model placement, and FAL integration).
 * **`index.html`** — defines the render canvas and the on-screen instruction text overlay.
-
----
-
-That’s it — just `npm install`, set up `.env`, and `npm run dev`.
