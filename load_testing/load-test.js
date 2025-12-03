@@ -1,6 +1,5 @@
 import puppeteer from 'puppeteer';
 
-// CONFIGURATION - Modify these parameters as needed
 const CONFIG = {
   baseUrl: 'https://jrschappert.github.io/p2p-mesh-sharing/',
   numClients: 6,
