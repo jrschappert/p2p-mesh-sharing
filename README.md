@@ -127,4 +127,4 @@ Click the ground to open the modal → type a prompt → generate a model, or us
 
 ---
 
-That’s it — just `npm install`, set up `.env`, and `npm run dev`. 🚀
+That’s it — just `npm install`, set up `.env`, and `npm run dev`.
